@@ -19,6 +19,8 @@ import 'features/messages/presentation/blocs/messages_bloc.dart';
 import 'features/feed/presentation/blocs/feed_bloc.dart';
 import 'features/notifications/presentation/bloc/notifications_bloc.dart';
 import 'features/notifications/domain/notifications_repository.dart';
+import 'services/media_player_command_service.dart';
+import 'features/music/data/repositories/audio_repository_impl.dart';
 
 /// Главный виджет приложения K-Connect
 ///
@@ -32,6 +34,18 @@ class KConnectApp extends StatefulWidget {
 }
 
 class _KConnectAppState extends State<KConnectApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MediaPlayerCommandService.initialize(
+        queueBloc: locator<QueueBloc>(),
+        playbackBloc: locator<PlaybackBloc>(),
+        audioRepository: locator<AudioRepositoryImpl>(),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
