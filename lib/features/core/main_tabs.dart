@@ -36,6 +36,7 @@ import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:kconnect_mobile/features/notifications/presentation/bloc/notifications_bloc.dart';
 import 'package:kconnect_mobile/features/notifications/presentation/bloc/notifications_event.dart';
 import 'package:kconnect_mobile/features/notifications/presentation/widgets/notifications_section.dart';
+import 'package:kconnect_mobile/routes/route_names.dart';
 
 class MainTabs extends StatefulWidget {
   const MainTabs({super.key});
@@ -93,13 +94,13 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
       _pageController.position.isScrollingNotifier.addListener(() {
         isTabAnimating.value = _pageController.position.isScrollingNotifier.value;
       });
-      final authState = BlocProvider.of<AuthBloc>(context).state;
+      final authState = context.read<AuthBloc>().state;
       if (authState is! AuthAuthenticated) {
-        BlocProvider.of<AuthBloc>(context).add(RefreshAuthEvent());
+        context.read<AuthBloc>().add(RefreshAuthEvent());
       }
-      BlocProvider.of<AccountBloc>(context).add(LoadAccountsEvent());
-      BlocProvider.of<NotificationsBloc>(context).add(const NotificationsStarted());
-      BlocProvider.of<MessagesBloc>(context).add(ConnectWebSocketEvent());
+      context.read<AccountBloc>().add(LoadAccountsEvent());
+      context.read<NotificationsBloc>().add(const NotificationsStarted());
+      context.read<MessagesBloc>().add(ConnectWebSocketEvent());
     });
   }
 
@@ -178,7 +179,8 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
         if (feedScrolledDown.value) {
           scrollToTopRequested.value = true;
         } else {
-          // TODO: Реализовать добавление поста
+          // Навигация к созданию поста
+          Navigator.of(context).pushNamed(RouteNames.createPost);
         }
         break;
       case 3:

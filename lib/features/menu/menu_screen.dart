@@ -252,7 +252,7 @@ class _MenuScreenState extends State<MenuScreen> {
             onPressed: () {
               // Reset theme to default immediately (like in personalization settings)
               context.read<ThemeBloc>().add(ResetThemeEvent());
-              BlocProvider.of<AuthBloc>(context).add(LogoutEvent());
+              context.read<AuthBloc>().add(LogoutEvent());
               Navigator.of(context).pop();
             },
             child: const Text('Выйти'),

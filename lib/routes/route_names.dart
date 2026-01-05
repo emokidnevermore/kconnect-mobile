@@ -13,4 +13,5 @@ class RouteNames {
   static const profile = '/profile';
   static const personalization = '/personalization';
   static const mediaViewer = '/media-viewer';
+  static const createPost = '/create-post';
 }

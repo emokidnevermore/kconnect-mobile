@@ -15,11 +15,13 @@ import 'package:flutter/gestures.dart';
 class SwipePopContainer extends StatefulWidget {
   final Widget child;
   final VoidCallback? onPop;
+  final bool enabled;
 
   const SwipePopContainer({
     super.key,
     required this.child,
     this.onPop,
+    this.enabled = true,
   });
 
   @override
@@ -41,7 +43,6 @@ class _SwipePopContainerState extends State<SwipePopContainer> {
         _dragDistance += details.delta.dx;
       }
       ..onEnd = (details) {
-        // iOS-style swipe back: swiped right from anywhere on screen, with sufficient distance or velocity
         final swipedRight = _dragDistance > 50;
         final fastVelocity = details.velocity.pixelsPerSecond.dx > 300;
         final longDistance = _dragDistance > 100;
@@ -64,6 +65,10 @@ class _SwipePopContainerState extends State<SwipePopContainer> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.enabled) {
+      return widget.child;
+    }
+
     return RawGestureDetector(
       gestures: <Type, GestureRecognizerFactory>{
         HorizontalDragGestureRecognizer: GestureRecognizerFactoryWithHandlers<HorizontalDragGestureRecognizer>(

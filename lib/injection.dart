@@ -43,6 +43,15 @@ import 'features/auth/presentation/blocs/account_bloc.dart';
 import 'features/notifications/data/notifications_remote_data_source.dart';
 import 'features/notifications/data/notifications_repository_impl.dart';
 import 'features/notifications/domain/notifications_repository.dart';
+import 'features/media_picker/data/repositories/media_repository_impl.dart';
+import 'features/media_picker/data/datasources/photo_manager_datasource.dart';
+import 'features/media_picker/domain/repositories/media_repository.dart';
+import 'features/media_picker/domain/usecases/fetch_gallery_media_usecase.dart';
+import 'features/media_picker/domain/usecases/request_media_permissions_usecase.dart';
+import 'features/post_creation/data/repositories/post_repository_impl.dart';
+import 'features/post_creation/domain/repositories/post_repository.dart';
+import 'features/post_creation/domain/usecases/create_post_usecase.dart';
+import 'features/post_creation/presentation/blocs/post_creation_bloc.dart';
 
 final GetIt locator = GetIt.instance;
 
@@ -75,6 +84,10 @@ void setupLocator() {
   locator.registerLazySingleton<MessagesRepositoryImpl>(() => MessagesRepositoryImpl(locator<MessagesService>()));
   locator.registerLazySingleton<NotificationsRepositoryImpl>(() => NotificationsRepositoryImpl(locator<NotificationsRemoteDataSource>()));
   locator.registerLazySingleton<NotificationsRepository>(() => locator<NotificationsRepositoryImpl>());
+  locator.registerLazySingleton<MediaRepositoryImpl>(() => MediaRepositoryImpl(PhotoManagerDatasource()));
+  locator.registerLazySingleton<MediaRepository>(() => locator<MediaRepositoryImpl>());
+  locator.registerLazySingleton<PostRepositoryImpl>(() => PostRepositoryImpl(locator<PostsService>()));
+  locator.registerLazySingleton<PostRepository>(() => locator<PostRepositoryImpl>());
 
 
 
@@ -101,6 +114,9 @@ void setupLocator() {
   locator.registerFactory<UpdateProfileUseCase>(() => UpdateProfileUseCase(locator<ProfileRepositoryImpl>()));
   locator.registerFactory<FollowUserUseCase>(() => FollowUserUseCase(locator<ProfileRepositoryImpl>()));
   locator.registerFactory<FetchChatsUseCase>(() => FetchChatsUseCase(locator<MessagesRepositoryImpl>()));
+  locator.registerFactory<FetchGalleryMediaUsecase>(() => FetchGalleryMediaUsecase(locator<MediaRepositoryImpl>()));
+  locator.registerFactory<RequestMediaPermissionsUsecase>(() => RequestMediaPermissionsUsecase(locator<MediaRepositoryImpl>()));
+  locator.registerFactory<CreatePostUsecase>(() => CreatePostUsecase(locator<PostRepositoryImpl>()));
 
   // Blocs
   locator.registerLazySingleton<ThemeBloc>(() => ThemeBloc()..add(LoadThemeEvent()));
@@ -158,4 +174,5 @@ void setupLocator() {
         locator<MessagesRepositoryImpl>(),
         MessengerWebSocketService(locator<DioClient>()),
       ));
+  locator.registerFactory<PostCreationBloc>(() => PostCreationBloc(locator<CreatePostUsecase>()));
 }

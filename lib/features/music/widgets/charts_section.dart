@@ -185,7 +185,7 @@ class _ChartsSectionState extends State<ChartsSection> {
               const SizedBox(height: 8),
               // Content
               SizedBox(
-                height: 440, // Increased height for 5 items to prevent overflow
+                height: 440,
                 child: _buildChartList(selectedTracks),
               ),
             ],
@@ -205,7 +205,7 @@ class _ChartsSectionState extends State<ChartsSection> {
       );
     }
 
-    // Limit to first 5 tracks and disable scrolling by using Column
+    // Лимит в 5 треков
     final limitedTracks = tracks.take(5).toList();
     final trackWidgets = List.generate(limitedTracks.length, (index) {
       final track = limitedTracks[index];
@@ -241,7 +241,7 @@ class _ChartsSectionState extends State<ChartsSection> {
         ),
         child: Row(
           children: [
-            // Album art
+            // Обложка
             SizedBox(
               width: 54,
               height: 54,
@@ -256,7 +256,7 @@ class _ChartsSectionState extends State<ChartsSection> {
               ),
             ),
             const SizedBox(width: 12),
-            // Track info
+            // Инфо
             Expanded(
               child: SizedBox(
                 height: 54,
@@ -304,14 +304,12 @@ class _ChartsSectionState extends State<ChartsSection> {
                 ),
               ),
             ),
-            // Trend indicator (only for popular tracks)
             if (selectedKey == 'popular')
               TrendIndicator(
                 trend: track.trend,
-                changePercent: track.changePercent,
+                changePercent: null,
                 iconSize: 12,
               ),
-            // Like button
             if (widget.onTrackLike != null)
               CupertinoButton(
                 padding: EdgeInsets.zero,

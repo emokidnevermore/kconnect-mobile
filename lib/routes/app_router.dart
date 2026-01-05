@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kconnect_mobile/bootstrap/splash_screen.dart';
 import 'package:kconnect_mobile/features/auth/login_screen.dart';
 import 'package:kconnect_mobile/features/auth/register_screen.dart';
@@ -14,6 +15,9 @@ import 'package:kconnect_mobile/features/profile/other_profile_screen.dart';
 import 'package:kconnect_mobile/features/personalization/personalization_screen.dart';
 import 'package:kconnect_mobile/core/widgets/media_viewer.dart';
 import 'package:kconnect_mobile/core/media_item.dart';
+import 'package:kconnect_mobile/features/post_creation/presentation/screens/post_creation_screen.dart';
+import 'package:kconnect_mobile/features/post_creation/presentation/blocs/post_creation_bloc.dart';
+import 'package:kconnect_mobile/injection.dart';
 import 'route_names.dart';
 
 /// Основной маршрутизатор приложения
@@ -46,6 +50,13 @@ class AppRouter {
           builder: (_) => MediaViewer(
             items: items,
             initialIndex: initialIndex,
+          ),
+        );
+      case RouteNames.createPost:
+        return CupertinoPageRoute(
+          builder: (_) => BlocProvider.value(
+            value: locator<PostCreationBloc>(),
+            child: const PostCreationScreen(),
           ),
         );
       default:

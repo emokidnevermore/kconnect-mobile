@@ -8,13 +8,13 @@ library;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:kconnect_mobile/features/auth/presentation/blocs/auth_bloc.dart';
+import 'package:kconnect_mobile/injection.dart';
 import 'package:kconnect_mobile/theme/app_text_styles.dart';
 import 'package:kconnect_mobile/theme/app_colors.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_bloc.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_event.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_state.dart';
-import '../../../providers/profile_bloc_providers.dart';
+
 import 'components/profile_header.dart';
 import 'components/profile_background.dart';
 import 'components/profile_content_card.dart';
@@ -77,10 +77,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> with AutomaticKeepAli
   Widget build(BuildContext context) {
     super.build(context);
     return BlocProvider<ProfileBloc>(
-      create: (BuildContext context) {
-        final authBloc = BlocProvider.of<AuthBloc>(context);
-        return ProfileBlocProviders.createProfileBloc(authBloc);
-      },
+      create: (BuildContext context) => locator<ProfileBloc>(),
       child: BlocBuilder<ProfileBloc, ProfileState>(
       builder: (context, state) {
         if (state is ProfileInitial) {

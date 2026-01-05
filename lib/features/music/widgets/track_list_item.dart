@@ -20,12 +20,14 @@ class TrackListItem extends StatefulWidget {
   final Track track;
   final VoidCallback? onTap;
   final VoidCallback? onLike;
+  final bool showLikeButton;
 
   const TrackListItem({
     super.key,
     required this.track,
     this.onTap,
     this.onLike,
+    this.showLikeButton = true,
   });
 
   @override
@@ -45,7 +47,7 @@ class _TrackListItemState extends State<TrackListItem> with AutomaticKeepAliveCl
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            // Album art
+            // Обложка
             ImageUtils.buildAlbumArt(
               ImageUtils.getCompleteImageUrl(widget.track.coverPath),
               width: 60,
@@ -53,13 +55,13 @@ class _TrackListItemState extends State<TrackListItem> with AutomaticKeepAliveCl
               fit: BoxFit.cover,
             ),
             const SizedBox(width: 12),
-            // Track info
+            // Информация о треке
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Title
+                  // Название
                   Text(
                     widget.track.title,
                     style: AppTextStyles.bodyMedium.copyWith(
@@ -86,17 +88,19 @@ class _TrackListItemState extends State<TrackListItem> with AutomaticKeepAliveCl
               _formatDuration(widget.track.durationMs ~/ 1000),
               style: AppTextStyles.bodySecondary.copyWith(fontSize: 12),
             ),
-            const SizedBox(width: 12),
-            // Like button
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: widget.onLike,
-              child: Icon(
-                widget.track.isLiked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
-                size: 20,
-                color: widget.track.isLiked ? context.dynamicPrimaryColor : AppColors.textSecondary,
+            // Кнопка лайка
+            if (widget.showLikeButton) ...[
+              const SizedBox(width: 12),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: widget.onLike,
+                child: Icon(
+                  widget.track.isLiked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
+                  size: 20,
+                  color: widget.track.isLiked ? context.dynamicPrimaryColor : AppColors.textSecondary,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),

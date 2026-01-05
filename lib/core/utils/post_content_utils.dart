@@ -71,6 +71,9 @@ abstract class PostContentUtils {
       ),
       strong: AppTextStyles.postContent.copyWith(fontWeight: FontWeight.bold),
       em: AppTextStyles.postContent.copyWith(fontStyle: FontStyle.italic),
+      del: AppTextStyles.postContent.copyWith(
+        decoration: TextDecoration.lineThrough,
+      ),
       blockquote: AppTextStyles.postContent.copyWith(
         fontStyle: FontStyle.italic
       ),
