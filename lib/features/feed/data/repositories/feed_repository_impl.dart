@@ -10,6 +10,9 @@ import '../../../../../services/posts_service.dart';
 import '../../../../../services/users_service.dart';
 import '../../domain/models/post.dart';
 import '../../domain/models/comment.dart';
+import '../../domain/models/poll.dart';
+import '../../domain/models/complaint.dart';
+import '../../domain/models/block_status.dart';
 import '../../domain/repositories/feed_repository.dart';
 
 /// Реализация репозитория ленты новостей
@@ -146,6 +149,46 @@ class FeedRepositoryImpl implements FeedRepository {
     }
   }
 
+  /// Голосует в опросе
+  ///
+  /// Отправляет запрос на голосование в опросе.
+  /// Возвращает обновленный объект опроса.
+  ///
+  /// [pollId] - ID опроса
+  /// [optionIds] - список ID выбранных вариантов ответа
+  /// Returns: Обновленный объект Poll
+  /// Throws: Exception при ошибке голосования
+  @override
+  Future<Poll> votePoll(int pollId, List<int> optionIds, {bool isMultipleChoice = false, bool hasExistingVotes = false}) async {
+    try {
+      final data = await _postsService.votePoll(pollId, optionIds, isMultipleChoice: isMultipleChoice, hasExistingVotes: hasExistingVotes);
+      if (data.containsKey('poll')) {
+        final pollData = data['poll'] as Map<String, dynamic>;
+        return Poll.fromJson(pollData);
+      }
+      throw Exception('Неверный формат ответа от API');
+    } catch (e) {
+      throw Exception('Не удалось проголосовать: $e');
+    }
+  }
+
+  /// Создает жалобу на пост
+  ///
+  /// Отправляет запрос на создание жалобы на указанный пост.
+  /// Возвращает результат создания жалобы.
+  ///
+  /// [complaintRequest] - данные жалобы
+  /// Returns: ComplaintResponse с результатом создания жалобы
+  /// Throws: Exception при ошибке создания жалобы
+  @override
+  Future<ComplaintResponse> submitComplaint(ComplaintRequest complaintRequest) async {
+    try {
+      return await _postsService.submitComplaint(complaintRequest);
+    } catch (e) {
+      throw Exception('Не удалось отправить жалобу: $e');
+    }
+  }
+
 }
 
 /// Реализация репозитория пользователей
@@ -175,6 +218,98 @@ class UsersRepositoryImpl implements UsersRepository {
       return List<Map<String, dynamic>>.from(data);
     } catch (e) {
       throw Exception('Не удалось загрузить онлайн-пользователей: $e');
+    }
+  }
+}
+
+/// Реализация репозитория блокировки пользователей
+///
+/// Предоставляет методы для управления черным списком пользователей.
+/// Делегирует выполнение операций сервису UsersService.
+class UserBlockRepositoryImpl implements UserBlockRepository {
+  /// Сервис для работы с API пользователей
+  final UsersService _usersService;
+
+  /// Конструктор репозитория блокировки пользователей
+  ///
+  /// [usersService] - сервис для выполнения операций с пользователями
+  UserBlockRepositoryImpl(this._usersService);
+
+  /// Блокирует пользователя
+  ///
+  /// Отправляет запрос на добавление пользователя в черный список.
+  ///
+  /// [userId] - ID пользователя для блокировки
+  /// Returns: BlockUserResponse с результатом блокировки
+  /// Throws: Exception при ошибке блокировки
+  @override
+  Future<BlockUserResponse> blockUser(int userId) async {
+    try {
+      return await _usersService.blockUser(userId);
+    } catch (e) {
+      throw Exception('Не удалось заблокировать пользователя: $e');
+    }
+  }
+
+  /// Разблокирует пользователя
+  ///
+  /// Отправляет запрос на удаление пользователя из черного списка.
+  ///
+  /// [userId] - ID пользователя для разблокировки
+  /// Returns: UnblockUserResponse с результатом разблокировки
+  /// Throws: Exception при ошибке разблокировки
+  @override
+  Future<UnblockUserResponse> unblockUser(int userId) async {
+    try {
+      return await _usersService.unblockUser(userId);
+    } catch (e) {
+      throw Exception('Не удалось разблокировать пользователя: $e');
+    }
+  }
+
+  /// Проверяет статус блокировки пользователей
+  ///
+  /// Отправляет запрос на проверку статуса блокировки указанных пользователей.
+  ///
+  /// [userIds] - список ID пользователей для проверки
+  /// Returns: BlockStatusResponse со статусами блокировки
+  /// Throws: Exception при ошибке проверки статуса
+  @override
+  Future<BlockStatusResponse> checkBlockStatus(List<int> userIds) async {
+    try {
+      return await _usersService.checkBlockStatus(userIds);
+    } catch (e) {
+      throw Exception('Не удалось проверить статус блокировки: $e');
+    }
+  }
+
+  /// Получает список заблокированных пользователей
+  ///
+  /// Отправляет запрос на получение списка пользователей в черном списке.
+  ///
+  /// Returns: BlockedUsersResponse со списком заблокированных пользователей
+  /// Throws: Exception при ошибке получения списка
+  @override
+  Future<BlockedUsersResponse> getBlockedUsers() async {
+    try {
+      return await _usersService.getBlockedUsers();
+    } catch (e) {
+      throw Exception('Не удалось получить список заблокированных пользователей: $e');
+    }
+  }
+
+  /// Получает статистику черного списка
+  ///
+  /// Отправляет запрос на получение статистики блокировки пользователей.
+  ///
+  /// Returns: BlacklistStatsResponse со статистикой черного списка
+  /// Throws: Exception при ошибке получения статистики
+  @override
+  Future<BlacklistStatsResponse> getBlacklistStats() async {
+    try {
+      return await _usersService.getBlacklistStats();
+    } catch (e) {
+      throw Exception('Не удалось получить статистику черного списка: $e');
     }
   }
 }

@@ -2,15 +2,16 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../theme/app_colors.dart';
 import '../../../../theme/app_text_styles.dart';
 import '../../../../core/utils/theme_extensions.dart';
 import '../../../../core/utils/image_utils.dart';
+import '../../../../core/widgets/authorized_cached_network_image.dart';
 import '../../../profile/components/swipe_pop_container.dart';
 import '../../../music/domain/models/track.dart';
 import '../../../feed/presentation/blocs/feed_event.dart';
 import '../../../feed/presentation/blocs/feed_bloc.dart';
 import '../widgets/markdown_context_menu.dart';
+import '../widgets/poll_form_widget.dart';
 import '../../../../shared/widgets/media_picker_modal.dart';
 import '../blocs/post_creation_event.dart';
 import '../../domain/models/post_creation_state.dart';
@@ -32,10 +33,18 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
   String _selectedText = '';
   final Map<String, Track> _selectedTracksMap = {};
 
+  /// Флаг предотвращения множественных нажатий на кнопку публикации
+  bool _isPublishButtonPressed = false;
+
   @override
   void initState() {
     super.initState();
+
+    // Сбрасываем состояние при входе в экран
+    context.read<PostCreationBloc>().add(const ResetStateEvent());
+
     final state = context.read<PostCreationBloc>().state;
+
     _contentController.text = state.draftPost.content;
     _contentController.addListener(_onContentChanged);
   }
@@ -57,52 +66,69 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
   Widget build(BuildContext context) {
     return BlocListener<PostCreationBloc, PostCreationState>(
       listener: (context, state) {
-        if (state.status == PostCreationStatus.success) {
+        if (state.status == PostCreationStatus.success) { 
+          // Сбрасываем состояние BLoC для следующего использования
+          context.read<PostCreationBloc>().add(const ResetStateEvent());
+          // Сбрасываем флаг кнопки перед навигацией
+          setState(() {
+            _isPublishButtonPressed = false;
+          });
           _navigateToFeedAndRefresh(context);
         } else if (state.status == PostCreationStatus.error && state.errorMessage != null) {
+          // Сбрасываем флаг кнопки при ошибке
+          setState(() {
+            _isPublishButtonPressed = false;
+          });
           _showErrorMessage(context, state.errorMessage!);
         }
       },
       child: BlocBuilder<PostCreationBloc, PostCreationState>(
         builder: (context, state) {
-          return CupertinoPageScaffold(
-            backgroundColor: AppColors.bgDark,
-            navigationBar: CupertinoNavigationBar(
-              backgroundColor: AppColors.bgDark.withValues(alpha: 0.8),
-              middle: Text(
+          return Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            appBar: AppBar(
+              backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+              surfaceTintColor: Colors.transparent,
+              title: Text(
                 'Новый пост',
-                style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
+                style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface),
               ),
-              leading: CupertinoNavigationBarBackButton(
+              leading: BackButton(
                 color: context.dynamicPrimaryColor,
               ),
-              trailing: CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: state.canPublish == true ? _publishPost : null,
-                child: Icon(
-                  CupertinoIcons.checkmark,
-                  color: state.canPublish == true
-                      ? context.dynamicPrimaryColor
-                      : AppColors.textSecondary,
-                  size: 24,
+              actions: [
+                IconButton(
+                  onPressed: state.canPublish == true ? _publishPost : null,
+                  icon: Icon(
+                    Icons.check,
+                    color: state.canPublish == true
+                        ? context.dynamicPrimaryColor
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 24,
+                  ),
                 ),
-              ),
+              ],
             ),
-            child: SafeArea(
-              child: SwipePopContainer(
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
+            body: GestureDetector(
+              onTap: () {
+                FocusScope.of(context).unfocus();
+              },
+              behavior: HitTestBehavior.opaque,
+              child: SafeArea(
+                child: SwipePopContainer(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
                         padding: const EdgeInsets.all(16),
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(
                             minHeight: 280,
                           ),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: AppColors.bgCard,
-                              borderRadius: BorderRadius.circular(12),
+                          child: Card(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -114,7 +140,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                                     decoration: BoxDecoration(
                                       border: Border(
                                         bottom: BorderSide(
-                                          color: AppColors.textSecondary.withValues(alpha: 0.1),
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
                                           width: 1,
                                         ),
                                       ),
@@ -134,19 +160,19 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
 
                                 Padding(
                                   padding: const EdgeInsets.all(16),
-                                  child: CupertinoTextField(
+                                  child: TextField(
                                     controller: _contentController,
                                     style: AppTextStyles.bodyMedium.copyWith(
-                                      color: AppColors.textPrimary,
+                                      color: Theme.of(context).colorScheme.onSurface,
                                     ),
                                     maxLines: null,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.transparent,
-                                      border: null,
-                                    ),
-                                    placeholder: 'Что у вас нового?',
-                                    placeholderStyle: AppTextStyles.bodyMedium.copyWith(
-                                      color: AppColors.textSecondary,
+                                    decoration: InputDecoration(
+                                      hintText: 'Что у вас нового?',
+                                      border: InputBorder.none,
+                                      hintStyle: AppTextStyles.bodyMedium.copyWith(
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      ),
+                                      contentPadding: EdgeInsets.zero,
                                     ),
                                     onChanged: (value) {
                                       setState(() {});
@@ -171,8 +197,14 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                                 if (state.draftPost.imagePaths.isNotEmpty)
                                   _buildSelectedMediaList(state.draftPost.imagePaths),
 
+                                if (state.draftPost.videoPath != null)
+                                  _buildSelectedVideo(state.draftPost.videoPath!, state.draftPost.videoThumbnailPath),
+
                                 if (state.draftPost.audioTrackIds.isNotEmpty)
                                   _buildSelectedTracksList(state.draftPost.audioTrackIds),
+
+                                // Poll form
+                                const PollFormWidget(),
                               ],
                             ),
                           ),
@@ -183,20 +215,19 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: AppColors.bgDark,
+                        color: Theme.of(context).colorScheme.surface,
                         border: Border(
                           top: BorderSide(
-                            color: AppColors.textSecondary.withValues(alpha: 0.1),
+                            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
                             width: 1,
                           ),
                         ),
                       ),
                       child: Row(
                         children: [
-                          CupertinoButton(
-                            padding: EdgeInsets.zero,
+                          IconButton(
                             onPressed: _showMediaPicker,
-                            child: Container(
+                            icon: Container(
                               width: 32,
                               height: 32,
                               decoration: BoxDecoration(
@@ -204,8 +235,31 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Icon(
-                                CupertinoIcons.add,
+                                Icons.add,
                                 color: context.dynamicPrimaryColor,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(width: 8),
+
+                          IconButton(
+                            onPressed: _togglePollForm,
+                            icon: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: state.showPollForm
+                                    ? context.dynamicPrimaryColor.withValues(alpha: 0.2)
+                                    : context.dynamicPrimaryColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.poll,
+                                color: state.showPollForm
+                                    ? context.dynamicPrimaryColor
+                                    : context.dynamicPrimaryColor.withValues(alpha: 0.7),
                                 size: 20,
                               ),
                             ),
@@ -216,7 +270,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                           Text(
                             '${_contentController.text.length}',
                             style: AppTextStyles.bodySecondary.copyWith(
-                              color: AppColors.textSecondary,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -225,6 +279,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                   ],
                 ),
               ),
+            ),
             ),
           );
         },
@@ -238,11 +293,18 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
     showCupertinoModalPopup(
       context: context,
       builder: (context) => MediaPickerModal(
-        onMediaSelected: (imagePaths, tracks) {
+        onMediaSelected: (imagePaths, videoPath, videoThumbnailPath, tracks) {
+          // Обработка изображений
           if (imagePaths.isNotEmpty) {
             postCreationBloc.add(AddImagesEvent(imagePaths));
           }
 
+          // Обработка видео
+          if (videoPath != null) {
+            postCreationBloc.add(AddVideoEvent(videoPath, videoThumbnailPath: videoThumbnailPath));
+          }
+
+          // Обработка музыки
           if (tracks.isNotEmpty) {
             for (final track in tracks) {
               _selectedTracksMap[track.id.toString()] = track;
@@ -252,23 +314,26 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
               postCreationBloc.add(AddAudioTrackEvent(track.id.toString()));
             }
           }
-
         },
       ),
     );
   }
 
   Widget _buildInlineFormatButton(String label, String prefix, String suffix) {
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      minimumSize: const Size(32, 32),
-      borderRadius: BorderRadius.circular(6),
-      color: AppColors.bgDark.withValues(alpha: 0.3),
+    return TextButton(
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        minimumSize: const Size(32, 32),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.3),
+      ),
       onPressed: () => _applyInlineFormatting(prefix, suffix),
       child: Text(
         label,
         style: AppTextStyles.bodySecondary.copyWith(
-          color: AppColors.textPrimary,
+          color: Theme.of(context).colorScheme.onSurface,
           fontSize: 12,
         ),
       ),
@@ -315,7 +380,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
-            color: AppColors.textSecondary.withValues(alpha: 0.1),
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
             width: 1,
           ),
         ),
@@ -326,7 +391,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
           Text(
             'Медиа (${imagePaths.length})',
             style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -357,7 +422,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: AppColors.textSecondary.withValues(alpha: 0.2),
+          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
           width: 1,
         ),
       ),
@@ -371,9 +436,9 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
-                    color: AppColors.bgDark,
+                    color: Theme.of(context).colorScheme.surface,
                     child: const Icon(
-                      CupertinoIcons.exclamationmark_triangle,
+                      Icons.warning,
                       color: Colors.white,
                       size: 20,
                     ),
@@ -396,7 +461,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
-                  CupertinoIcons.xmark,
+                  Icons.close,
                   size: 12,
                   color: Colors.white,
                 ),
@@ -415,7 +480,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Icon(
-                  CupertinoIcons.video_camera,
+                  Icons.videocam,
                   size: 10,
                   color: Colors.white,
                 ),
@@ -437,7 +502,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
-            color: AppColors.textSecondary.withValues(alpha: 0.1),
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
             width: 1,
           ),
         ),
@@ -448,7 +513,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
           Text(
             'Музыка (${trackIds.length})',
             style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -475,10 +540,10 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.bgDark.withValues(alpha: 0.3),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: AppColors.textSecondary.withValues(alpha: 0.1),
+          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
           width: 1,
         ),
       ),
@@ -489,7 +554,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
             height: 40,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(6),
-              color: AppColors.bgDark,
+              color: Theme.of(context).colorScheme.surface,
             ),
             child: (track?.coverPath?.isNotEmpty == true)
                 ? Builder(
@@ -499,26 +564,29 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                       return imageUrl != null
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(6),
-                              child: Image.network(
-                                imageUrl,
+                              child: AuthorizedCachedNetworkImage(
+                                imageUrl: imageUrl,
+                                width: double.infinity,
+                                height: double.infinity,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Icon(
-                                  CupertinoIcons.music_note,
-                                  color: AppColors.textSecondary,
+                                filterQuality: FilterQuality.low,
+                                errorWidget: (context, url, error) => Icon(
+                                  Icons.music_note,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   size: 20,
                                 ),
                               ),
                             )
                           : Icon(
-                              CupertinoIcons.music_note,
-                              color: AppColors.textSecondary,
+                              Icons.music_note,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                               size: 20,
                             );
                     },
                   )
                 : Icon(
-                    CupertinoIcons.music_note,
-                    color: AppColors.textSecondary,
+                    Icons.music_note,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     size: 20,
                   ),
           ),
@@ -531,7 +599,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                 Text(
                   track?.title ?? 'Неизвестный трек',
                   style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.textPrimary,
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontWeight: FontWeight.w500,
                   ),
                   maxLines: 1,
@@ -541,7 +609,7 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
                 Text(
                   track?.artist ?? 'Неизвестный исполнитель',
                   style: AppTextStyles.bodySecondary.copyWith(
-                    color: AppColors.textSecondary,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontSize: 12,
                   ),
                   maxLines: 1,
@@ -551,12 +619,13 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
             ),
           ),
 
-          CupertinoButton(
+          IconButton(
             padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
             onPressed: () => _removeTrack(trackId),
-            child: Icon(
-              CupertinoIcons.xmark_circle,
-              color: AppColors.textSecondary,
+            icon: Icon(
+              Icons.cancel,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               size: 20,
             ),
           ),
@@ -574,12 +643,140 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
     postCreationBloc.add(RemoveImageEvent(imagePath));
   }
 
+  Widget _buildSelectedVideo(String videoPath, String? thumbnailPath) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Видео',
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: Theme.of(context).colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 200,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
+                width: 1,
+              ),
+            ),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: thumbnailPath != null
+                        ? Image.file(
+                            File(thumbnailPath),
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Theme.of(context).colorScheme.surface,
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.videocam,
+                                    color: Colors.white,
+                                    size: 48,
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : Container(
+                            color: Theme.of(context).colorScheme.surface,
+                            child: const Center(
+                              child: Icon(
+                                Icons.videocam,
+                                color: Colors.white,
+                                size: 48,
+                              ),
+                            ),
+                          ),
+                  ),
+                ),
+                // Кнопка play
+                Positioned.fill(
+                  child: Center(
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                ),
+                // Кнопка удаления
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: GestureDetector(
+                    onTap: () {
+                      context.read<PostCreationBloc>().add(const RemoveVideoEvent());
+                    },
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _removeTrack(String trackId) {
     final postCreationBloc = context.read<PostCreationBloc>();
     postCreationBloc.add(RemoveAudioTrackEvent(trackId));
   }
 
+  void _togglePollForm() {
+    context.read<PostCreationBloc>().add(const TogglePollFormEvent());
+  }
+
   void _publishPost() {
+
+    // Предотвращаем множественные нажатия
+    if (_isPublishButtonPressed) {
+      return;
+    }
+
+    setState(() {
+      _isPublishButtonPressed = true;
+    });
+
     final selectedTracks = _selectedTracksMap.values.toList();
     context.read<PostCreationBloc>().add(PublishPostEvent(selectedTracks));
   }
@@ -598,15 +795,16 @@ class _PostCreationScreenState extends State<PostCreationScreen> {
   }
 
   void _showErrorMessage(BuildContext context, String message) {
-    showCupertinoDialog(
+    showDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('Ошибка'),
         content: Text(message),
         actions: [
-          CupertinoDialogAction(
-            child: const Text('OK'),
+          TextButton(
             onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
           ),
         ],
       ),

@@ -1,5 +1,8 @@
 import '../models/post.dart';
 import '../models/comment.dart';
+import '../models/poll.dart';
+import '../models/complaint.dart';
+import '../models/block_status.dart';
 
 /// Интерфейс репозитория для операций с лентой новостей
 ///
@@ -46,6 +49,54 @@ abstract class FeedRepository {
   ///
   /// [commentId] - идентификатор комментария
   Future<void> unlikeComment(int commentId);
+
+  /// Голосует в опросе
+  ///
+  /// [pollId] - ID опроса
+  /// [optionIds] - список ID выбранных вариантов ответа
+  /// [isMultipleChoice] - флаг множественного выбора
+  /// [hasExistingVotes] - флаг наличия существующих голосов
+  /// Returns: Обновленный объект Poll
+  Future<Poll> votePoll(int pollId, List<int> optionIds, {bool isMultipleChoice = false, bool hasExistingVotes = false});
+
+  /// Создает жалобу на пост
+  ///
+  /// [complaintRequest] - данные жалобы
+  /// Returns: ComplaintResponse с результатом создания жалобы
+  Future<ComplaintResponse> submitComplaint(ComplaintRequest complaintRequest);
+}
+
+/// Интерфейс репозитория для операций с блокировкой пользователей
+///
+/// Предоставляет методы для управления черным списком пользователей.
+abstract class UserBlockRepository {
+  /// Блокирует пользователя
+  ///
+  /// [userId] - ID пользователя для блокировки
+  /// Returns: BlockUserResponse с результатом блокировки
+  Future<BlockUserResponse> blockUser(int userId);
+
+  /// Разблокирует пользователя
+  ///
+  /// [userId] - ID пользователя для разблокировки
+  /// Returns: UnblockUserResponse с результатом разблокировки
+  Future<UnblockUserResponse> unblockUser(int userId);
+
+  /// Проверяет статус блокировки пользователей
+  ///
+  /// [userIds] - список ID пользователей для проверки
+  /// Returns: BlockStatusResponse со статусами блокировки
+  Future<BlockStatusResponse> checkBlockStatus(List<int> userIds);
+
+  /// Получает список заблокированных пользователей
+  ///
+  /// Returns: BlockedUsersResponse со списком заблокированных пользователей
+  Future<BlockedUsersResponse> getBlockedUsers();
+
+  /// Получает статистику черного списка
+  ///
+  /// Returns: BlacklistStatsResponse со статистикой черного списка
+  Future<BlacklistStatsResponse> getBlacklistStats();
 }
 
 /// Интерфейс репозитория для операций с пользователями

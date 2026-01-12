@@ -5,11 +5,8 @@
 /// для обеспечения контрастности с фоновым цветом.
 library;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../core/utils/theme_extensions.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_fonts.dart';
 
 /// Виджет иконки с бейджем уведомлений
 ///
@@ -42,48 +39,26 @@ class BadgeIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final showBadge = count > 0;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: onPressed, minimumSize: Size(32, 32),
-          child: icon,
+    return Badge(
+      isLabelVisible: showBadge,
+      label: Text(
+        count > 99 ? '99+' : '$count',
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          height: 1.1,
         ),
-        if (showBadge)
-          Positioned(
-            top: -2,
-            right: -2,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              constraints: const BoxConstraints(minWidth: 18, minHeight: 16),
-              decoration: BoxDecoration(
-                color: context.dynamicPrimaryColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.bgDark, width: 1),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                count > 99 ? '99+' : '$count',
-                textAlign: TextAlign.center,
-                overflow: TextOverflow.visible,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: _badgeTextColor(context),
-                  fontSize: 10,
-                  height: 1.1,
-                  fontWeight: FontWeight.w700,
-                ) ??
-                TextStyle(
-                  fontFamily: AppFonts.poppins,
-                  color: _badgeTextColor(context),
-                  fontSize: 10,
-                  height: 1.1,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-      ],
+      ),
+      backgroundColor: context.dynamicPrimaryColor,
+      textColor: _badgeTextColor(context),
+      alignment: AlignmentDirectional.topEnd,
+      offset: const Offset(4, -4),
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        onPressed: onPressed,
+        icon: icon,
+      ),
     );
   }
 
@@ -94,6 +69,6 @@ class BadgeIcon extends StatelessWidget {
   Color _badgeTextColor(BuildContext context) {
     final primary = context.dynamicPrimaryColor;
     // Если основной цвет светлый (близок к белому), используем черный текст для контраста
-    return primary.computeLuminance() > 0.8 ? Colors.black : AppColors.textPrimary;
+    return primary.computeLuminance() > 0.8 ? Colors.black : Theme.of(context).colorScheme.onPrimary;
   }
 }

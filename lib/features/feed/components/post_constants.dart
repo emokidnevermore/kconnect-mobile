@@ -12,6 +12,7 @@ class PostConstants {
 
   /// Горизонтальные отступы карточки
   static const double cardHorizontalPadding = 24.0;
+  static const double cardVerticalPaddingInside = 16.0;
 
   /// Вертикальные отступы карточки
   static const double cardVerticalPadding = 6.0;
@@ -40,11 +41,11 @@ class PostConstants {
   /// Высота градиентной маски
   static const double gradientMaskHeight = 40.0;
 
-  /// Радиус скругления изображений и карточек
-  static const double borderRadius = 8.0;
+  /// Радиус скругления изображений и мелких элементов
+  static const double borderRadius = 16.0;
 
   /// Радиус скругления карточки
-  static const double cardBorderRadius = 12.0;
+  static const double cardBorderRadius = 20.0;
 
   /// Размер иконок действий
   static const double actionIconSize = 24.0;

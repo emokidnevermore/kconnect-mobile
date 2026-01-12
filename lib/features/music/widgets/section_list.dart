@@ -5,9 +5,8 @@
 /// Используется для отображения треков в различных секциях музыки.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
-import '../../../theme/app_colors.dart';
 import '../domain/models/track.dart';
 import '../presentation/blocs/music_state.dart';
 import 'track_card.dart';
@@ -38,8 +37,8 @@ class SectionList extends StatelessWidget {
       return SizedBox(
         height: 220,
         child: Shimmer.fromColors(
-          baseColor: AppColors.bgCard,
-          highlightColor: AppColors.bgCard.withValues(alpha: 0.5),
+          baseColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+          highlightColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -49,7 +48,7 @@ class SectionList extends StatelessWidget {
                 width: 160,
                 margin: EdgeInsets.only(right: index == 4 ? 0 : 16),
                 decoration: BoxDecoration(
-                  color: AppColors.bgCard,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -60,7 +59,7 @@ class SectionList extends StatelessWidget {
                       height: 140,
                       margin: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.bgCard,
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
@@ -68,14 +67,14 @@ class SectionList extends StatelessWidget {
                     Container(
                       height: 16,
                       margin: const EdgeInsets.symmetric(horizontal: 8),
-                      color: AppColors.bgCard,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     // Artist placeholder
                     Container(
                       height: 14,
                       margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
                       width: 100,
-                      color: AppColors.bgCard,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                   ],
                 ),
@@ -90,7 +89,7 @@ class SectionList extends StatelessWidget {
       return const SizedBox(
         height: 220,
         child: Center(
-          child: CupertinoActivityIndicator(),
+          child: CircularProgressIndicator(),
         ),
       );
     }

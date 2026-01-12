@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cupertino_back_gesture/cupertino_back_gesture.dart';
@@ -10,7 +11,6 @@ import 'core/theme/presentation/blocs/theme_bloc.dart';
 import 'core/theme/presentation/blocs/theme_state.dart';
 import 'features/auth/presentation/blocs/auth_bloc.dart';
 import 'features/auth/presentation/blocs/account_bloc.dart';
-import 'features/music/presentation/blocs/playback_bloc.dart';
 import 'features/music/presentation/blocs/queue_bloc.dart';
 import 'features/music/presentation/blocs/music_bloc.dart';
 
@@ -19,8 +19,7 @@ import 'features/messages/presentation/blocs/messages_bloc.dart';
 import 'features/feed/presentation/blocs/feed_bloc.dart';
 import 'features/notifications/presentation/bloc/notifications_bloc.dart';
 import 'features/notifications/domain/notifications_repository.dart';
-import 'services/media_player_command_service.dart';
-import 'features/music/data/repositories/audio_repository_impl.dart';
+import 'services/media_player_service.dart';
 
 /// Главный виджет приложения K-Connect
 ///
@@ -37,13 +36,6 @@ class _KConnectAppState extends State<KConnectApp> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      MediaPlayerCommandService.initialize(
-        queueBloc: locator<QueueBloc>(),
-        playbackBloc: locator<PlaybackBloc>(),
-        audioRepository: locator<AudioRepositoryImpl>(),
-      );
-    });
   }
 
   @override
@@ -52,8 +44,7 @@ class _KConnectAppState extends State<KConnectApp> {
         providers: [
           BlocProvider<AuthBloc>(create: (_) => locator<AuthBloc>(), lazy: false),
           BlocProvider<AccountBloc>(create: (_) => locator<AccountBloc>(), lazy: false),
-          BlocProvider<PlaybackBloc>(create: (_) => locator<PlaybackBloc>(), lazy: false),
-          BlocProvider<QueueBloc>(create: (_) => locator<QueueBloc>(), lazy: true),
+          BlocProvider<QueueBloc>(create: (_) => locator<QueueBloc>(), lazy: false),
           BlocProvider<MusicBloc>(create: (_) => locator<MusicBloc>(), lazy: true),
           BlocProvider<FeedBloc>(create: (_) => locator<FeedBloc>()),
           BlocProvider<ProfileBloc>(
@@ -68,26 +59,34 @@ class _KConnectAppState extends State<KConnectApp> {
             lazy: false,
           ),
         ],
-        child: BlocProvider.value(
-          value: locator<ThemeBloc>(),
-          child: BlocBuilder<ThemeBloc, ThemeState>(
-            builder: (context, themeState) {
-              final accentColor = themeState is ThemeLoaded
-                  ? themeState.accentColor
-                  : const MaterialColor(
-                      0xFFD0BCFF,
-                      <int, Color>{
-                        50: Color(0xFFF3F0FF),
-                        100: Color(0xFFE0DCF9),
-                        200: Color(0xFFC9C0F0),
-                        300: Color(0xFFB2A4E7),
-                        400: Color(0xFF9B88DE),
-                        500: Color(0xFFD0BCFF),
-                        600: Color(0xFF8F70E3),
-                        700: Color(0xFF7F5BD9),
-                        800: Color(0xFF6F46CF),
-                        900: Color(0xFF5F31C5),
-                      },
+        child: Builder(
+          builder: (context) {
+            // Инициализируем MediaPlayerService после создания BlocProvider
+            // чтобы использовать правильный экземпляр QueueBloc
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              try {
+                final queueBloc = context.read<QueueBloc>();
+                MediaPlayerService.initialize(queueBloc);
+                if (kDebugMode) {
+                  debugPrint('App: MediaPlayerService initialized successfully');
+                }
+              } catch (e, stackTrace) {
+                if (kDebugMode) {
+                  debugPrint('App: Error initializing MediaPlayerService: $e');
+                  debugPrint('App: Stack trace: $stackTrace');
+                }
+              }
+            });
+
+            return BlocProvider.value(
+              value: locator<ThemeBloc>(),
+              child: BlocBuilder<ThemeBloc, ThemeState>(
+                builder: (context, themeState) {
+              final colorScheme = themeState is ThemeLoaded
+                  ? themeState.colorScheme
+                  : ColorScheme.fromSeed(
+                      seedColor: const Color(0xFFD0BCFF),
+                      brightness: Brightness.dark,
                     );
 
               return DefaultTextStyle(
@@ -101,7 +100,7 @@ class _KConnectAppState extends State<KConnectApp> {
                     title: 'K-Connect',
                     debugShowCheckedModeBanner: false,
                     navigatorKey: AppRouter.navigatorKey,
-                    theme: AppTheme.materialDarkTheme(accentColor).copyWith(
+                    theme: AppTheme.materialDarkTheme(colorScheme).copyWith(
                       pageTransitionsTheme: const PageTransitionsTheme(
                         builders: {
                           TargetPlatform.android: CupertinoPageTransitionsBuilderCustomBackGestureWidth(),
@@ -123,8 +122,10 @@ class _KConnectAppState extends State<KConnectApp> {
                   ),
                 ),
               );
-            },
-          ),
+                },
+              ),
+            );
+          },
         ),
     );
   }

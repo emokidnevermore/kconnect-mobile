@@ -121,7 +121,7 @@ class AccountBloc extends Bloc<AccountEvent, AccountState> {
     try {
       // Отчистка кэша текущей сессии
       debugPrint('AccountBloc: Clearing user data for account switch');
-      _dataClearService.clearUserDataForAccountSwitch();
+      await _dataClearService.clearUserDataForAccountSwitch();
 
       if (targetAccount.login == null || targetAccount.password == null) {
         debugPrint('AccountBloc: Cannot switch to account without login credentials');
@@ -207,7 +207,7 @@ class AccountBloc extends Bloc<AccountEvent, AccountState> {
           debugPrint('AccountBloc: Successfully switched to ${updatedAccount.username} with fresh session key');
 
           debugPrint('AccountBloc: Triggering data reload for all features...');
-          _dataClearService.clearUserDataForAccountSwitch();
+          await _dataClearService.clearUserDataForAccountSwitch();
 
           // Ресет ui
           debugPrint('AccountBloc: Restarting app to fully reload UI with new account data...');

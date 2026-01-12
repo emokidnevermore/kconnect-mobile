@@ -17,6 +17,9 @@ class PostCreationBloc extends Bloc<PostCreationEvent, PostCreationState> {
   /// Таймер для авто-сохранения черновика
   Timer? _autoSaveTimer;
 
+  /// Флаг предотвращения множественных публикаций
+  bool _isPublishingInProgress = false;
+
   PostCreationBloc(this._createPostUsecase) : super(PostCreationState.initial()) {
     on<UpdateContentEvent>(_onUpdateContent);
     on<AddImagesEvent>(_onAddImages);
@@ -31,8 +34,20 @@ class PostCreationBloc extends Bloc<PostCreationEvent, PostCreationState> {
     on<SaveDraftEvent>(_onSaveDraft);
     on<LoadDraftEvent>(_onLoadDraft);
     on<ClearFormEvent>(_onClearForm);
+    on<ResetStateEvent>(_onResetState);
 
-    _startAutoSave();
+    // Poll events
+    on<TogglePollFormEvent>(_onTogglePollForm);
+    on<UpdatePollQuestionEvent>(_onUpdatePollQuestion);
+    on<AddPollOptionEvent>(_onAddPollOption);
+    on<RemovePollOptionEvent>(_onRemovePollOption);
+    on<UpdatePollOptionEvent>(_onUpdatePollOption);
+    on<TogglePollAnonymousEvent>(_onTogglePollAnonymous);
+    on<TogglePollMultipleEvent>(_onTogglePollMultiple);
+    on<UpdatePollExpiresInDaysEvent>(_onUpdatePollExpiresInDays);
+
+    // Отключаем авто-сохранение для предотвращения сохранения состояния опросов
+    // _startAutoSave();
   }
 
   @override
@@ -58,9 +73,18 @@ class PostCreationBloc extends Bloc<PostCreationEvent, PostCreationState> {
 
     final updatedDraft = state.draftPost.copyWith(
       imagePaths: currentImages,
+      // Автоматически отключаем опрос при добавлении медиа
+      pollQuestion: null,
+      pollOptions: [],
+      pollIsAnonymous: false,
+      pollIsMultiple: false,
+      pollExpiresInDays: null,
       savedAt: DateTime.now(),
     );
-    emit(state.copyWith(draftPost: updatedDraft));
+    emit(state.copyWith(
+      draftPost: updatedDraft,
+      showPollForm: false, // Скрываем форму опроса
+    ));
   }
 
   /// Обработчик удаления изображения
@@ -79,15 +103,26 @@ class PostCreationBloc extends Bloc<PostCreationEvent, PostCreationState> {
   void _onAddVideo(AddVideoEvent event, Emitter<PostCreationState> emit) {
     final updatedDraft = state.draftPost.copyWith(
       videoPath: event.videoPath,
+      videoThumbnailPath: event.videoThumbnailPath,
+      // Автоматически отключаем опрос при добавлении медиа
+      pollQuestion: null,
+      pollOptions: [],
+      pollIsAnonymous: false,
+      pollIsMultiple: false,
+      pollExpiresInDays: null,
       savedAt: DateTime.now(),
     );
-    emit(state.copyWith(draftPost: updatedDraft));
+    emit(state.copyWith(
+      draftPost: updatedDraft,
+      showPollForm: false, // Скрываем форму опроса
+    ));
   }
 
   /// Обработчик удаления видео
   void _onRemoveVideo(RemoveVideoEvent event, Emitter<PostCreationState> emit) {
     final updatedDraft = state.draftPost.copyWith(
       videoPath: null,
+      videoThumbnailPath: null,
       savedAt: DateTime.now(),
     );
     emit(state.copyWith(draftPost: updatedDraft));
@@ -101,9 +136,18 @@ class PostCreationBloc extends Bloc<PostCreationEvent, PostCreationState> {
 
       final updatedDraft = state.draftPost.copyWith(
         audioTrackIds: currentTracks,
+        // Автоматически отключаем опрос при добавлении медиа
+        pollQuestion: null,
+        pollOptions: [],
+        pollIsAnonymous: false,
+        pollIsMultiple: false,
+        pollExpiresInDays: null,
         savedAt: DateTime.now(),
       );
-      emit(state.copyWith(draftPost: updatedDraft));
+      emit(state.copyWith(
+        draftPost: updatedDraft,
+        showPollForm: false, // Скрываем форму опроса
+      ));
     }
   }
 
@@ -128,24 +172,46 @@ class PostCreationBloc extends Bloc<PostCreationEvent, PostCreationState> {
 
   /// Обработчик публикации поста
   void _onPublishPost(PublishPostEvent event, Emitter<PostCreationState> emit) async {
-    if (!state.canPublish) return;
 
+    // Проверяем все условия блокировки
+    if (_isPublishingInProgress) {
+      return;
+    }
+
+    if (state.status == PostCreationStatus.publishing) {
+      return;
+    }
+
+    if (!state.canPublish) {
+      return;
+    }
+
+    // Устанавливаем флаг блокировки ДО начала операции
+    _isPublishingInProgress = true;
     emit(state.copyWith(status: PostCreationStatus.publishing));
 
     try {
-
       final params = CreatePostParams(
         content: state.draftPost.content.trim(),
         isNsfw: false,
         imagePaths: state.draftPost.imagePaths,
+        videoPath: state.draftPost.videoPath,
+        videoThumbnailPath: state.draftPost.videoThumbnailPath,
         musicTracks: event.selectedTracks,
+        pollQuestion: state.draftPost.pollQuestion,
+        pollOptions: state.draftPost.pollOptions,
+        pollIsAnonymous: state.draftPost.pollIsAnonymous,
+        pollIsMultiple: state.draftPost.pollIsMultiple,
+        pollExpiresInDays: state.draftPost.pollExpiresInDays,
       );
 
       final result = await _createPostUsecase.call(params);
 
       await result.fold(
-        (failure) => throw Exception(failure.toString()),
-        (post) async {
+        (failure) {
+          throw Exception(failure.toString());
+        },
+        (post) {
           emit(state.copyWith(status: PostCreationStatus.success));
         },
       );
@@ -154,6 +220,9 @@ class PostCreationBloc extends Bloc<PostCreationEvent, PostCreationState> {
         status: PostCreationStatus.error,
         errorMessage: 'Не удалось опубликовать пост: ${error.toString()}',
       ));
+    } finally {
+      // Сбрасываем флаг ТОЛЬКО в finally блоке
+      _isPublishingInProgress = false;
     }
   }
 
@@ -182,12 +251,123 @@ class PostCreationBloc extends Bloc<PostCreationEvent, PostCreationState> {
     emit(PostCreationState.initial());
   }
 
-  /// Запуск авто-сохранения черновика
-  void _startAutoSave() {
-    _autoSaveTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (state.hasUnsavedChanges) {
-        add(SaveDraftEvent());
-      }
-    });
+  /// Обработчик сброса состояния при входе в экран
+  void _onResetState(ResetStateEvent event, Emitter<PostCreationState> emit) {
+    _isPublishingInProgress = false;
+    emit(PostCreationState.initial());
   }
+
+  /// Обработчик переключения формы опроса
+  void _onTogglePollForm(TogglePollFormEvent event, Emitter<PostCreationState> emit) {
+    if (state.showPollForm) {
+      // Скрываем форму и очищаем данные опроса
+      final updatedDraft = state.draftPost.copyWith(
+        pollQuestion: null,
+        pollOptions: [],
+        pollIsAnonymous: false,
+        pollIsMultiple: false,
+        pollExpiresInDays: null,
+        savedAt: DateTime.now(),
+      );
+      emit(state.copyWith(
+        draftPost: updatedDraft,
+        showPollForm: false,
+      ));
+    } else {
+      // Показываем форму и автоматически удаляем все медиа-контент
+      // (опросы не могут сочетаться с картинками, видео или музыкой)
+      final updatedDraft = state.draftPost.copyWith(
+        imagePaths: [], // Удаляем все картинки
+        videoPath: null, // Удаляем видео
+        videoThumbnailPath: null,
+        audioTrackIds: [], // Удаляем музыку
+        savedAt: DateTime.now(),
+      );
+      emit(state.copyWith(
+        draftPost: updatedDraft,
+        showPollForm: true,
+      ));
+    }
+  }
+
+  /// Обработчик обновления вопроса опроса
+  void _onUpdatePollQuestion(UpdatePollQuestionEvent event, Emitter<PostCreationState> emit) {
+    final updatedDraft = state.draftPost.copyWith(
+      pollQuestion: event.question.isEmpty ? null : event.question,
+      savedAt: DateTime.now(),
+    );
+    emit(state.copyWith(draftPost: updatedDraft));
+  }
+
+  /// Обработчик добавления варианта ответа
+  void _onAddPollOption(AddPollOptionEvent event, Emitter<PostCreationState> emit) {
+    if (state.draftPost.pollOptions.length >= 10) return;
+
+    final currentOptions = List<String>.from(state.draftPost.pollOptions);
+    currentOptions.add(event.option);
+
+    final updatedDraft = state.draftPost.copyWith(
+      pollOptions: currentOptions,
+      savedAt: DateTime.now(),
+    );
+    emit(state.copyWith(draftPost: updatedDraft));
+  }
+
+  /// Обработчик удаления варианта ответа
+  void _onRemovePollOption(RemovePollOptionEvent event, Emitter<PostCreationState> emit) {
+    if (state.draftPost.pollOptions.length <= 2) return;
+
+    final currentOptions = List<String>.from(state.draftPost.pollOptions);
+    if (event.index >= 0 && event.index < currentOptions.length) {
+      currentOptions.removeAt(event.index);
+    }
+
+    final updatedDraft = state.draftPost.copyWith(
+      pollOptions: currentOptions,
+      savedAt: DateTime.now(),
+    );
+    emit(state.copyWith(draftPost: updatedDraft));
+  }
+
+  /// Обработчик обновления варианта ответа
+  void _onUpdatePollOption(UpdatePollOptionEvent event, Emitter<PostCreationState> emit) {
+    final currentOptions = List<String>.from(state.draftPost.pollOptions);
+    if (event.index >= 0 && event.index < currentOptions.length) {
+      currentOptions[event.index] = event.option;
+    }
+
+    final updatedDraft = state.draftPost.copyWith(
+      pollOptions: currentOptions,
+      savedAt: DateTime.now(),
+    );
+    emit(state.copyWith(draftPost: updatedDraft));
+  }
+
+  /// Обработчик переключения анонимности опроса
+  void _onTogglePollAnonymous(TogglePollAnonymousEvent event, Emitter<PostCreationState> emit) {
+    final updatedDraft = state.draftPost.copyWith(
+      pollIsAnonymous: event.isAnonymous,
+      savedAt: DateTime.now(),
+    );
+    emit(state.copyWith(draftPost: updatedDraft));
+  }
+
+  /// Обработчик переключения множественного выбора
+  void _onTogglePollMultiple(TogglePollMultipleEvent event, Emitter<PostCreationState> emit) {
+    final updatedDraft = state.draftPost.copyWith(
+      pollIsMultiple: event.isMultiple,
+      savedAt: DateTime.now(),
+    );
+    emit(state.copyWith(draftPost: updatedDraft));
+  }
+
+  /// Обработчик обновления срока окончания опроса
+  void _onUpdatePollExpiresInDays(UpdatePollExpiresInDaysEvent event, Emitter<PostCreationState> emit) {
+    final updatedDraft = state.draftPost.copyWith(
+      pollExpiresInDays: event.days,
+      savedAt: DateTime.now(),
+    );
+    emit(state.copyWith(draftPost: updatedDraft));
+  }
+
 }

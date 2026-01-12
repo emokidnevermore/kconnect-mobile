@@ -2,28 +2,31 @@
 ///
 /// Плавающий плеер в нижней части экрана с эффектом жидкого стекла.
 /// Поддерживает анимацию раскрытия для показа дополнительных контролов.
-/// Интегрируется с PlaybackBloc и QueueBloc для управления музыкой.
+/// Работает напрямую со стримами AudioService как в официальных примерах.
 library;
 
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show CircularProgressIndicator, Colors;
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../presentation/blocs/playback_bloc.dart';
+import 'package:audio_service/audio_service.dart';
+import 'package:rxdart/rxdart.dart';
 import '../presentation/blocs/queue_bloc.dart';
 import '../presentation/blocs/queue_event.dart';
-import '../domain/models/playback_state.dart';
 import '../domain/models/queue_state.dart';
-import 'package:kconnect_mobile/theme/app_colors.dart';
+import '../domain/models/track.dart';
 import 'package:kconnect_mobile/theme/app_text_styles.dart';
+import 'package:kconnect_mobile/core/utils/theme_extensions.dart';
 import 'package:kconnect_mobile/core/utils/image_utils.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+import '../../../../services/audio_service_manager.dart';
+import '../../../../core/widgets/glass_mode_wrapper.dart';
 
 /// Виджет мини-плеера с анимацией раскрытия
 ///
 /// Показывает текущий трек, прогресс и элементы управления.
 /// Поддерживает плавную анимацию между свернутым и развернутым состояниями.
-/// Интегрируется с очередью для автоматического перехода к следующему треку.
+/// Работает напрямую со стримами AudioService как в официальных примерах.
 class MiniPlayer extends StatefulWidget {
   final VoidCallback? onMusicTabTap;
   final Function(bool hide)? onTabBarToggle;
@@ -32,6 +35,37 @@ class MiniPlayer extends StatefulWidget {
 
   @override
   State<MiniPlayer> createState() => _MiniPlayerState();
+}
+
+/// Состояние медиа для комбинирования MediaItem и позиции
+class _MediaState {
+  final MediaItem? mediaItem;
+  final Duration position;
+  final bool playing;
+  final bool isBuffering;
+
+  _MediaState(this.mediaItem, this.position, this.playing, this.isBuffering);
+
+  Track? get track {
+    if (mediaItem == null) return null;
+    final trackId = mediaItem!.extras?['trackId'] as int?;
+    if (trackId == null) return null;
+    return Track(
+      id: trackId,
+      title: mediaItem!.title,
+      artist: mediaItem!.artist ?? '',
+      durationMs: mediaItem!.duration?.inMilliseconds ?? 0,
+      coverPath: mediaItem!.extras?['coverPath'] as String?,
+      filePath: mediaItem!.extras?['originalUrl'] as String? ?? mediaItem!.id,
+      isLiked: mediaItem!.extras?['isLiked'] as bool? ?? false,
+    );
+  }
+
+  double get progress {
+    final duration = mediaItem?.duration;
+    if (duration == null || duration.inSeconds == 0) return 0.0;
+    return position.inSeconds / duration.inSeconds;
+  }
 }
 
 class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateMixin {
@@ -49,15 +83,14 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 300),
     );
 
-    // Will be called in build
   }
 
   void _setupAnimations(double screenWidth) {
     final expandedWidth = screenWidth - 32;
-    _positionAnimation = Tween<double>(begin: 16, end: 16).animate(
+    _positionAnimation = Tween<double>(begin: 12, end: 12).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic)
     );
     _widthAnimation = Tween<double>(begin: 50, end: expandedWidth).animate(
@@ -69,11 +102,9 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
     _borderRadiusAnimation = Tween<double>(begin: 25, end: 25).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic)
     );
-    // Album art animates from center (collapsed) to left (expanded)
-    _albumArtPositionAnimation = Tween<double>(begin: 3, end: 8).animate( // 3 = slightly left of center in 50px container, 8 = left in expanded
+    _albumArtPositionAnimation = Tween<double>(begin: 3, end: 4).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic)
     );
-    // Content opacity animates for smooth reveal
     _contentOpacityAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _animationController, curve: Interval(0.3, 1.0, curve: Curves.easeOut))
     );
@@ -96,135 +127,181 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
       _animationController.reverse();
     }
 
-    // Delay tab bar toggle to sync with animation
     Future.delayed(const Duration(milliseconds: 200), () {
       widget.onTabBarToggle?.call(_isExpanded);
     });
   }
 
-  void _handlePlayPause(BuildContext context, PlaybackState state) {
-    final bloc = context.read<PlaybackBloc>();
-    if (state.isBuffering) {
-      // Buffering - do nothing to prevent accidental restart
+  void _handlePlayPause() {
+    final handler = AudioServiceManager.getHandler();
+    if (handler == null) {
+      return;
+    }
+    
+    // Используем handler напрямую для получения текущего состояния
+    final currentState = handler.playbackState.valueOrNull;
+    final isPlaying = currentState?.playing ?? false;
+    
+    if (isPlaying) {
+      handler.pause();
     } else {
-      bloc.add(const PlaybackToggleRequested());
+      handler.play();
     }
   }
 
   void _handleNext(BuildContext context) {
-    // Trigger queue navigation
     context.read<QueueBloc>().add(const QueueNextRequested());
   }
 
   void _handlePrevious(BuildContext context) {
-    // Trigger queue navigation
     context.read<QueueBloc>().add(const QueuePreviousRequested());
+  }
+
+  /// Комбинированный стрим для медиа-элемента, позиции и состояния воспроизведения
+  Stream<_MediaState> get _mediaStateStream {
+    // Пробуем получить handler напрямую для доступа к mediaItem
+    final handler = AudioServiceManager.getHandler();
+    
+    // Используем handler.mediaItem если доступен (это ValueStream)
+    // Иначе используем AudioService.currentMediaItemStream
+    Stream<MediaItem?> mediaItemStream;
+    if (handler != null) {
+      // handler.mediaItem - это ValueStream, используем его напрямую
+      final initialValue = handler.mediaItem.valueOrNull;
+      if (kDebugMode) {
+        debugPrint('MiniPlayer: Using handler.mediaItem, initial value: ${initialValue?.title}');
+      }
+      // Используем ValueStream напрямую с начальным значением
+      mediaItemStream = handler.mediaItem.startWith(initialValue);
+    } else {
+      // Fallback when handler is not available - create a stream that emits null initially
+      if (kDebugMode) {
+        debugPrint('MiniPlayer: Using fallback stream (null)');
+      }
+      mediaItemStream = Stream.value(null);
+    }
+    
+    final positionStream = AudioService.position.startWith(Duration.zero);
+    
+    // Используем handler напрямую для playing, если доступен (как в MainTabs)
+    Stream<bool> playingStream;
+    Stream<bool> bufferingStream;
+    
+    if (handler != null) {
+      final initialPlaybackState = handler.playbackState.valueOrNull;
+      final initialPlaying = initialPlaybackState?.playing ?? false;
+      final initialBuffering = initialPlaybackState?.processingState == AudioProcessingState.buffering;
+
+      playingStream = handler.playbackState
+          .map((state) => state.playing)
+          .distinct()
+          .startWith(initialPlaying);
+      bufferingStream = handler.playbackState
+          .map((state) => state.processingState == AudioProcessingState.buffering)
+          .distinct()
+          .startWith(initialBuffering);
+    } else {
+      // Fallback when handler is not available - create streams that emit default values
+      playingStream = Stream.value(false);
+      bufferingStream = Stream.value(false);
+    }
+    
+    return Rx.combineLatest4<MediaItem?, Duration, bool, bool, _MediaState>(
+      mediaItemStream,
+      positionStream,
+      playingStream,
+      bufferingStream,
+      (mediaItem, position, playing, isBuffering) {
+        return _MediaState(mediaItem, position, playing, isBuffering);
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     _setupAnimations(MediaQuery.of(context).size.width);
 
-    return MultiBlocListener(
-      listeners: [
-        // Listen to queue changes and auto-play new tracks
-        BlocListener<QueueBloc, QueueState>(
-          listener: (context, queueState) {
-            final currentTrack = queueState.currentTrack;
-            final playbackBloc = context.read<PlaybackBloc>();
+    return BlocListener<QueueBloc, QueueState>(
+      listener: (context, queueState) {
+        // Очередь синхронизируется автоматически через MediaPlayerService
+        // Воспроизведение запускается автоматически при создании очереди
+      },
+      child: StreamBuilder<_MediaState>(
+        stream: _mediaStateStream,
+        builder: (context, snapshot) {
+          final mediaState = snapshot.data;
+          final hasTrack = mediaState?.track != null;
+          final track = mediaState?.track;
+          
+          
+          widget.onTabBarToggle?.call(hasTrack && _isExpanded);
 
-            // Only auto-play if queue has a track and it's different from currently playing
-            if (currentTrack != null) {
-              final currentPlaybackState = playbackBloc.state;
-              if (currentPlaybackState.currentTrack?.id != currentTrack.id) {
-                playbackBloc.add(PlaybackPlayRequested(currentTrack));
-              }
-            }
-          },
-        ),
-        // Listen to playback state changes for automatic queue progression
-        BlocListener<PlaybackBloc, PlaybackState>(
-          listener: (context, playbackState) {
-            // Check if track completed and trigger next track in queue
-            if (playbackState.error == 'COMPLETED' && playbackState.currentTrack != null) {
-              context.read<QueueBloc>().add(const QueueNextRequested());
-            }
-          },
-        ),
-      ],
-      child: BlocBuilder<PlaybackBloc, PlaybackState>(
-        builder: (context, state) {
-          widget.onTabBarToggle?.call(state.hasTrack && _isExpanded);
-
-          // Main mini player content
-        Widget miniPlayerContent = AnimatedBuilder(
-          animation: _animationController,
-          builder: (context, child) => Positioned(
-            bottom: 16,
-            left: _positionAnimation.value,
-            child: LiquidGlassLayer(
-              settings: const LiquidGlassSettings(
-                thickness: 15,
-                glassColor: Color(0x33FFFFFF),
-                lightIntensity: 1.5,
-                chromaticAberration: 1,
-                saturation: 1.1,
-                ambientStrength: 1,
-                blur: 4,
-                refractiveIndex: 1.8,
-              ),
-              child: LiquidGlass(
-                shape: LiquidRoundedSuperellipse(borderRadius: _borderRadiusAnimation.value),
+          Widget miniPlayerContent = AnimatedBuilder(
+            animation: _animationController,
+            builder: (context, child) => Positioned(
+              bottom: 16,
+              left: _positionAnimation.value,
+              child: GlassModeWrapper(
+                borderRadius: _borderRadiusAnimation.value,
+                settings: const LiquidGlassSettings(
+                  thickness: 15,
+                  glassColor: Color(0x33FFFFFF),
+                  lightIntensity: 1.5,
+                  chromaticAberration: 1,
+                  saturation: 1.1,
+                  ambientStrength: 1,
+                  blur: 4,
+                  refractiveIndex: 1.8,
+                ),
                 child: SizedBox(
-                  key: ValueKey('miniPlayer_${state.currentTrack?.id ?? 'idle'}_$_isExpanded'),
+                  key: ValueKey('miniPlayer_${track?.id ?? 'idle'}_$_isExpanded'),
                   width: _widthAnimation.value,
                   height: _heightAnimation.value,
-                  child: !state.hasTrack
-                      ? _buildMusicTabButton(state)
-                      : _buildAnimatedView(context, state),
+                  child: !hasTrack
+                      ? _buildMusicTabButton(mediaState)
+                      : _buildAnimatedView(context, mediaState!),
                 ),
               ),
             ),
-          ),
-        );
+          );
 
-        // Separate overlay for circular progress with expansion animation
-        if (state.hasTrack && (state.isPlaying || state.isBuffering)) {
-          final overlay = AnimatedBuilder(
-            animation: _animationController,
-            builder: (context, child) => Positioned(
-              bottom: 16 - 3 * (1 - _animationController.value), // 3px offset for stroke alignment
-              left: 16 - 3 * (1 - _animationController.value),
-              child: IgnorePointer( // Allow gestures through to mini player buttons
-                child: Opacity(
-                  opacity: 1 - _animationController.value,
-                  child: Transform.scale(
-                    scale: 1 - _animationController.value,
-                    child: SizedBox(
-                      width: 56, // Same as mini player + stroke
-                      height: 56,
-                      child: CircularProgressIndicator(
-                        value: state.progress.clamp(0.0, 1.0),
-                        strokeWidth: 3,
-                        backgroundColor: AppColors.bgWhite.withValues(alpha: 0.1),
-                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryPurple),
+          // Кружок прогресса вокруг кнопки мини плеера (показывается всегда, когда есть трек)
+          if (hasTrack) {
+            final overlay = AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) => Positioned(
+                bottom: 16 - 3 * (1 - _animationController.value),
+                left: 12 - 3 * (1 - _animationController.value),
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: 1 - _animationController.value,
+                    child: Transform.scale(
+                      scale: 1 - _animationController.value,
+                      child: SizedBox(
+                        width: 56,
+                        height: 56,
+                        child: CircularProgressIndicator(
+                          value: mediaState!.progress.clamp(0.0, 1.0),
+                          strokeWidth: 3,
+                          backgroundColor: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.1),
+                          valueColor: AlwaysStoppedAnimation<Color>(context.dynamicPrimaryColor),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          );
+            );
 
-          return Stack(
-            children: [
-              miniPlayerContent,
-              overlay,
-            ],
-          );
-        }
+            return Stack(
+              children: [
+                miniPlayerContent,
+                overlay,
+              ],
+            );
+          }
 
-        return miniPlayerContent;
+          return miniPlayerContent;
         },
       ),
     );
@@ -232,29 +309,33 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
 
 
 
-  Widget _buildMusicTabButton(PlaybackState state) {
-    final isPlaying = state.hasTrack && state.isPlaying;
+  Widget _buildMusicTabButton(_MediaState? mediaState) {
+    final hasTrack = mediaState?.track != null;
+    final progress = mediaState?.progress ?? 0.0;
 
-    return CupertinoButton(
+    return IconButton(
       padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
+      iconSize: 24,
+      color: Theme.of(context).colorScheme.onSurfaceVariant, // Явно задаем цвет для IconButton
       onPressed: widget.onMusicTabTap,
-      child: Stack(
+      icon: Stack(
         alignment: Alignment.center,
         children: [
-          const Icon(
-            CupertinoIcons.music_note,
+          Icon(
+            Icons.music_note,
             size: 24,
-            color: AppColors.bgWhite,
+            color: Theme.of(context).colorScheme.onSurfaceVariant, // Цвет неактивных кнопок таб-бара
           ),
-          if (isPlaying)
+          if (hasTrack) // Показываем кружок, если есть трек (независимо от playing)
             SizedBox(
               width: 32,
               height: 32,
               child: CircularProgressIndicator(
-                value: state.progress.clamp(0.0, 1.0),
+                value: progress.clamp(0.0, 1.0),
                 strokeWidth: 2,
-                backgroundColor: AppColors.bgWhite.withValues(alpha: 0.2),
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryPurple),
+                backgroundColor: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.2),
+                valueColor: AlwaysStoppedAnimation<Color>(context.dynamicPrimaryColor),
               ),
             ),
         ],
@@ -262,15 +343,17 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildAnimatedView(BuildContext context, PlaybackState state) {
-    final track = state.currentTrack!;
-    final hasError = state.hasError;
+  Widget _buildAnimatedView(BuildContext context, _MediaState mediaState) {
+    final track = mediaState.track!;
+    final duration = mediaState.mediaItem?.duration;
+    final progress = mediaState.progress;
+    final trackDuration = duration; // Сохраняем для использования в условии
 
     return Container(
       alignment: Alignment.center,
       decoration: BoxDecoration(
         border: Border.all(
-          color: AppColors.primaryPurple.withValues(alpha: 0.5),
+          color: context.dynamicPrimaryColor.withValues(alpha: 0.5),
           width: 2,
         ),
         borderRadius: BorderRadius.circular(_borderRadiusAnimation.value),
@@ -304,18 +387,18 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
                   placeholder: (context, url) => Container(
                     width: 40,
                     height: 40,
-                    color: AppColors.primaryPurple.withValues(alpha: 0.3),
-                    child: CupertinoActivityIndicator(
-                      color: AppColors.primaryPurple,
+                    color: context.dynamicPrimaryColor.withValues(alpha: 0.3),
+                    child: CircularProgressIndicator(
+                      color: context.dynamicPrimaryColor,
                     ),
                   ),
                   errorWidget: (context, url, error) => Container(
                     width: 40,
                     height: 40,
-                    color: AppColors.primaryPurple.withValues(alpha: 0.2),
+                    color: context.dynamicPrimaryColor.withValues(alpha: 0.2),
                     child: Icon(
-                      CupertinoIcons.music_note,
-                      color: AppColors.primaryPurple,
+                      Icons.music_note,
+                      color: context.dynamicPrimaryColor,
                       size: 16,
                     ),
                   ),
@@ -360,15 +443,6 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          // Error display (if any)
-                          if (hasError)
-                            Text(
-                              'Playback failed: ${state.error}',
-                              style: AppTextStyles.bodySecondary.copyWith(
-                                fontSize: 8,
-                                color: AppColors.error,
-                              ),
-                            ),
                         ],
                       ),
                     ),
@@ -379,50 +453,43 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Previous track button
-                      CupertinoButton(
+                      IconButton(
                         padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                         onPressed: () => _handlePrevious(context),
-                        child: Icon(
-                          CupertinoIcons.backward_end,
-                          color: AppColors.primaryPurple,
+                        icon: Icon(
+                          Icons.skip_previous,
+                          color: context.dynamicPrimaryColor,
                           size: 16,
                         ),
                       ),
                       const SizedBox(width: 4),
-                      if (hasError)
-                        CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: () => context.read<PlaybackBloc>().add(PlaybackPlayRequested(track)),
-                          child: const Icon(
-                            CupertinoIcons.refresh,
-                            color: AppColors.error,
-                            size: 16,
-                          ),
-                        )
-                      else
-                        CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: () => _handlePlayPause(context, state),
-                          child: _buildPlayAnimatedIcon(state.isPlaying, state.isBuffering),
-                        ),
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: mediaState.isBuffering ? null : _handlePlayPause,
+                        icon: _buildPlayAnimatedIcon(context, mediaState.playing, mediaState.isBuffering),
+                      ),
                       const SizedBox(width: 4),
                       // Next track button
-                      CupertinoButton(
+                      IconButton(
                         padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                         onPressed: () => _handleNext(context),
-                        child: Icon(
-                          CupertinoIcons.forward_end,
-                          color: AppColors.primaryPurple,
+                        icon: Icon(
+                          Icons.skip_next,
+                          color: context.dynamicPrimaryColor,
                           size: 16,
                         ),
                       ),
                       const SizedBox(width: 4),
-                      CupertinoButton(
+                      IconButton(
                         padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                         onPressed: _toggleExpand,
-                        child: Icon(
-                          _isExpanded ? CupertinoIcons.chevron_down : CupertinoIcons.arrow_up_to_line,
-                          color: AppColors.textSecondary,
+                        icon: Icon(
+                          _isExpanded ? Icons.expand_more : Icons.vertical_align_top,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           size: 16,
                         ),
                       ),
@@ -433,8 +500,8 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
             ),
           ),
 
-          // Progress bar at bottom of container (only when not errored)
-          if (!hasError)
+          // Progress bar at bottom of container
+          if (trackDuration != null && trackDuration > Duration.zero)
             Positioned(
               bottom: 0,
               left: 0,
@@ -444,22 +511,34 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
                   final box = context.findRenderObject() as RenderBox?;
                   if (box != null) {
                     final localPosition = box.globalToLocal(details.globalPosition);
-                    final progress = (localPosition.dx / box.size.width).clamp(0.0, 1.0);
+                    final tapProgress = (localPosition.dx / box.size.width).clamp(0.0, 1.0);
                     final newPosition = Duration(
-                      seconds: ((state.duration?.inSeconds ?? 0) * progress).round()
+                      seconds: (trackDuration.inSeconds * tapProgress).round()
                     );
-                    context.read<PlaybackBloc>().add(PlaybackSeekRequested(newPosition));
+                    final handler = AudioServiceManager.getHandler();
+                    if (handler != null) {
+                      handler.seek(newPosition).catchError((e) {
+                        // Ignore seek errors
+                      });
+                    } else {
+                      // Fallback when handler is not available - cannot seek without handler
+                      // This is a no-op since seeking requires an active audio handler
+                    }
                   }
                 },
                 child: Container(
                   height: 2,
                   width: double.infinity,
-                  color: AppColors.textSecondary.withValues(alpha: 0.1),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
+                  ),
                   child: FractionallySizedBox(
                     alignment: Alignment.centerLeft,
-                    widthFactor: state.progress.clamp(0.0, 1.0),
+                    widthFactor: progress.clamp(0.0, 1.0),
                     child: Container(
-                      color: AppColors.primaryPurple,
+                      decoration: BoxDecoration(
+                        color: context.dynamicPrimaryColor,
+                      ),
                     ),
                   ),
                 ),
@@ -472,22 +551,23 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
 
 
 
-  Widget _buildPlayAnimatedIcon(bool isPlaying, bool isBuffering) {
+  Widget _buildPlayAnimatedIcon(BuildContext context, bool isPlaying, bool isBuffering) {
+    final primaryColor = context.dynamicPrimaryColor;
     if (isBuffering) {
-      return CupertinoActivityIndicator(
-        color: AppColors.primaryPurple,
+      return CircularProgressIndicator(
+        color: primaryColor,
       );
     }
     if (!isPlaying) {
       return Icon(
-        CupertinoIcons.play,
-        color: AppColors.primaryPurple,
+        Icons.play_arrow,
+        color: primaryColor,
         size: 16,
       );
     }
     return Icon(
-      CupertinoIcons.pause,
-      color: AppColors.primaryPurple,
+      Icons.pause,
+      color: primaryColor,
       size: 20,
     );
   }

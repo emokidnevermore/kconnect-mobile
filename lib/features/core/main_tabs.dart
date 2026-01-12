@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kconnect_mobile/features/feed/feed_screen.dart';
@@ -9,7 +8,6 @@ import 'package:kconnect_mobile/features/messages/presentation/blocs/messages_bl
 import 'package:kconnect_mobile/features/messages/presentation/blocs/messages_event.dart';
 import 'package:kconnect_mobile/features/messages/presentation/blocs/messages_state.dart';
 import 'package:kconnect_mobile/features/profile/my_profile_screen.dart';
-import 'package:kconnect_mobile/theme/app_colors.dart';
 import 'package:kconnect_mobile/core/utils/theme_extensions.dart';
 import 'package:kconnect_mobile/core/widgets/app_header.dart';
 import 'package:kconnect_mobile/features/auth/presentation/blocs/auth_bloc.dart';
@@ -26,17 +24,23 @@ import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_even
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_state.dart';
 import 'package:kconnect_mobile/features/music/presentation/blocs/music_bloc.dart';
 import 'package:kconnect_mobile/features/music/presentation/blocs/music_event.dart';
+import 'package:kconnect_mobile/features/music/presentation/blocs/music_state.dart';
+import 'package:kconnect_mobile/features/music/presentation/blocs/queue_bloc.dart';
+import 'package:kconnect_mobile/features/music/presentation/blocs/queue_event.dart';
 import 'package:kconnect_mobile/core/theme/presentation/blocs/theme_bloc.dart';
 import 'package:kconnect_mobile/core/theme/presentation/blocs/theme_event.dart';
 import 'package:kconnect_mobile/services/storage_service.dart';
 import 'package:kconnect_mobile/features/music/widgets/mini_player.dart';
-import 'package:kconnect_mobile/features/music/presentation/blocs/playback_bloc.dart';
-import 'package:kconnect_mobile/features/music/domain/models/playback_state.dart';
+import 'package:audio_service/audio_service.dart';
+import 'package:rxdart/rxdart.dart';
+import 'package:kconnect_mobile/services/audio_service_manager.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:kconnect_mobile/features/notifications/presentation/bloc/notifications_bloc.dart';
+import 'package:kconnect_mobile/core/widgets/glass_mode_wrapper.dart';
 import 'package:kconnect_mobile/features/notifications/presentation/bloc/notifications_event.dart';
 import 'package:kconnect_mobile/features/notifications/presentation/widgets/notifications_section.dart';
 import 'package:kconnect_mobile/routes/route_names.dart';
+import 'package:kconnect_mobile/core/widgets/app_background.dart';
 
 class MainTabs extends StatefulWidget {
   const MainTabs({super.key});
@@ -58,7 +62,7 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
   final ValueNotifier<MusicSection> _musicSectionController = ValueNotifier(MusicSection.home);
   late final ValueNotifier<bool> _notificationsVisible;
   bool _isNotificationsOpen = false;
-  final ValueNotifier<int> _unreadMessagesCount = ValueNotifier(0);
+  final ValueNotifier<bool> _isMiniPlayerExpanded = ValueNotifier(false);
 
 
   @override
@@ -66,19 +70,21 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
     super.initState();
     _tabBarAnimationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 300), // Material 3 standard duration
     );
 
     _tabBarOpacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _tabBarAnimationController, curve: Curves.easeOutCubic)
+      CurvedAnimation(parent: _tabBarAnimationController, curve: Curves.easeOutCubic) // Material 3 emphasized easing
     );
     _tabBarBottomAnimation = Tween<double>(begin: 16.0, end: -50.0).animate(
-      CurvedAnimation(parent: _tabBarAnimationController, curve: Curves.easeOutCubic)
+      CurvedAnimation(parent: _tabBarAnimationController, curve: Curves.easeOutCubic) // Material 3 emphasized easing
     );
     _notificationsVisible = ValueNotifier(false);
 
     _pages = [
+
       const MyProfileScreen(),
+
       MusicHome(
         sectionController: _musicSectionController,
       ),
@@ -87,8 +93,11 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
         onScrollChanged: _onFeedScrollChanged,
         scrollToTopRequested: scrollToTopRequested,
       ),
-      MessagesScreen(),
+
+
+      const MessagesScreen(),
       const MenuScreen(),
+
     ];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _pageController.position.isScrollingNotifier.addListener(() {
@@ -113,7 +122,7 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
 
   void _onTabTapped(int index) {
     _pageController.animateToPage(index,
-        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+        duration: const Duration(milliseconds: 300), curve: Curves.easeInOutCubic); // Material 3 standard easing
   }
 
   void _onPageChanged(int index) {
@@ -144,22 +153,28 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
     _musicSectionController.value = MusicSection.home;
   }
 
+  void _onMusicArtistBack() {
+    _onTabTapped(1);
+    _musicSectionController.value = MusicSection.home;
+  }
+
+
 
 
   IconData _getDynamicIcon() {
     switch (_currentIndexNotifier.value) {
       case 0:
-        return CupertinoIcons.add;
+        return Icons.add;
       case 1:
-        return CupertinoIcons.search;
+        return Icons.search;
       case 2:
-        return feedScrolledDown.value ? CupertinoIcons.up_arrow : CupertinoIcons.add;
+        return feedScrolledDown.value ? Icons.arrow_upward : Icons.add;
       case 3:
-        return CupertinoIcons.pencil;
+        return Icons.edit;
       case 4:
-        return CupertinoIcons.person_2;
+        return Icons.person;
       default:
-        return CupertinoIcons.add;
+        return Icons.add;
     }
   }
 
@@ -184,7 +199,8 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
         }
         break;
       case 3:
-        // Сообщения: новый чат - открыть экран выбора пользователя для создания чата
+        // Сообщения: новый чат
+        Navigator.of(context).pushNamed(RouteNames.createChat);
         break;
       case 4:
         // Меню: мульти-аккаунт +
@@ -209,6 +225,7 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
   }
 
   void _onTabBarToggle(bool hide) {
+    _isMiniPlayerExpanded.value = hide;
     if (hide) {
       _tabBarAnimationController.forward();
     } else {
@@ -279,12 +296,6 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
               }
             },
           ),
-          BlocListener<MessagesBloc, MessagesState>(
-            listener: (context, state) {
-              debugPrint('MainTabs BlocListener: totalUnreadCount changed to ${state.totalUnreadCount}');
-              _unreadMessagesCount.value = state.totalUnreadCount;
-            },
-          ),
         ],
         child: PopScope(
           canPop: false,
@@ -301,36 +312,18 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
               }
             }
           },
-          child: CupertinoPageScaffold(
-          backgroundColor: AppColors.bgDark,
-          child: SafeArea(
-            bottom: false,
-            child: Column(
-              children: [
-                ValueListenableBuilder<MusicSection>(
-                  valueListenable: _musicSectionController,
-                  builder: (context, currentSection, child) => ValueListenableBuilder<int>(
-                    valueListenable: _currentIndexNotifier,
-                    builder: (context, currentIndex, child) => AppHeader(
-                      currentTabIndex: currentIndex,
-                      isInMusicFavoritesSection: currentIndex == 1 && currentSection == MusicSection.favorites,
-                      onMusicFavoritesBack: (currentIndex == 1 && currentSection == MusicSection.favorites) ? _onMusicFavoritesBack : null,
-                      isInMusicPlaylistsSection: currentIndex == 1 && currentSection == MusicSection.playlists,
-                      onMusicPlaylistsBack: (currentIndex == 1 && currentSection == MusicSection.playlists) ? _onMusicPlaylistsBack : null,
-                      isInMusicAllTracksSection: currentIndex == 1 && currentSection == MusicSection.allTracks,
-                      onMusicAllTracksBack: (currentIndex == 1 && currentSection == MusicSection.allTracks) ? _onMusicAllTracksBack : null,
-                      isInMusicSearchSection: currentIndex == 1 && currentSection == MusicSection.search,
-                      onMusicSearchBack: (currentIndex == 1 && currentSection == MusicSection.search) ? _onMusicSearchBack : null,
-                      onNotificationsTap: _toggleNotifications,
-                      isNotificationsOpen: _isNotificationsOpen,
-                      hideNotificationsBadge: _isNotificationsOpen,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Stack(
-                    children: [
-                      ValueListenableBuilder<MusicSection>(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              AppBackground(fallbackColor: Theme.of(context).colorScheme.surface),
+              Scaffold(
+                backgroundColor: Colors.transparent,
+                body: Stack(
+                  children: [
+                    // Контент (PageView) на нижнем слое - заполняет всё пространство
+                    SafeArea(
+                      bottom: false,
+                      child: ValueListenableBuilder<MusicSection>(
                         valueListenable: _musicSectionController,
                         builder: (context, section, child) {
                           return PageView(
@@ -341,34 +334,110 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
                           );
                         },
                       ),
-                      AnimatedBuilder(
-                        animation: _tabBarAnimationController,
-                        builder: (context, child) => Positioned(
-                          bottom: _tabBarBottomAnimation.value,
-                          left: 0,
-                          right: 0,
-                          child: Opacity(
-                            opacity: _tabBarOpacityAnimation.value,
-                            child: _buildTabBar(),
-                          ),
-                        ),
-                      ),
-                      AnimatedBuilder(
-                        animation: _tabBarAnimationController,
-                        builder: (context, child) => Positioned(
-                          bottom: _tabBarBottomAnimation.value,
-                          right: 16,
-                          child: Opacity(
-                            opacity: _tabBarOpacityAnimation.value,
-                            child: ValueListenableBuilder<int>(
-                              valueListenable: _currentIndexNotifier,
-                              builder: (context, currentIndex, child) => ValueListenableBuilder<bool>(
-                                valueListenable: feedScrolledDown,
-                                builder: (context, scrolledDown, child) => _buildDynamicButton(),
-                              ),
+                    ),
+                    // Хедер поверх контента (вне SafeArea для правильной прозрачности)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: SafeArea(
+                        bottom: false,
+                        child: ValueListenableBuilder<MusicSection>(
+                          valueListenable: _musicSectionController,
+                          builder: (context, currentSection, child) => ValueListenableBuilder<int>(
+                            valueListenable: _currentIndexNotifier,
+                            builder: (context, currentIndex, child) => AppHeader(
+                              currentTabIndex: currentIndex,
+                              isInMusicFavoritesSection: currentIndex == 1 && currentSection == MusicSection.favorites,
+                              onMusicFavoritesBack: (currentIndex == 1 && currentSection == MusicSection.favorites) ? _onMusicFavoritesBack : null,
+                              isInMusicPlaylistsSection: currentIndex == 1 && currentSection == MusicSection.playlists,
+                              onMusicPlaylistsBack: (currentIndex == 1 && currentSection == MusicSection.playlists) ? _onMusicPlaylistsBack : null,
+                              isInMusicAllTracksSection: currentIndex == 1 && currentSection == MusicSection.allTracks,
+                              onMusicAllTracksBack: (currentIndex == 1 && currentSection == MusicSection.allTracks) ? _onMusicAllTracksBack : null,
+                              isInMusicSearchSection: currentIndex == 1 && currentSection == MusicSection.search,
+                              onMusicSearchBack: (currentIndex == 1 && currentSection == MusicSection.search) ? _onMusicSearchBack : null,
+                            isInMusicArtistSection: currentIndex == 1 && currentSection == MusicSection.artist,
+                            onMusicArtistBack: (currentIndex == 1 && currentSection == MusicSection.artist) ? _onMusicArtistBack : null,
+                            artistNameWidget: (currentIndex == 1 && currentSection == MusicSection.artist) 
+                                ? BlocBuilder<MusicBloc, MusicState>(
+                                    builder: (context, state) {
+                                      final name = state.currentArtist?.name ?? 'Артист';
+                                      return Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : null,
+                              onNotificationsTap: _toggleNotifications,
+                              isNotificationsOpen: _isNotificationsOpen,
+                              hideNotificationsBadge: _isNotificationsOpen,
                             ),
                           ),
                         ),
+                      ),
+                    ),
+                      // TabBar и другие элементы поверх контента
+                      ValueListenableBuilder<MusicSection>(
+                        valueListenable: _musicSectionController,
+                        builder: (context, section, child) {
+                          // Скрываем таббар и кнопку в секции артиста
+                          if (section == MusicSection.artist) {
+                            return _buildArtistPlayButton();
+                          }
+                          
+                          return FutureBuilder<bool>(
+                            future: StorageService.getHideTabBar(),
+                            builder: (context, snapshot) {
+                              final hideTabBar = snapshot.data ?? false;
+                              if (hideTabBar) {
+                                return const SizedBox.shrink();
+                              }
+                              return AnimatedBuilder(
+                                animation: _tabBarAnimationController,
+                                builder: (context, child) => Positioned(
+                                  bottom: _tabBarBottomAnimation.value,
+                                  left: 0,
+                                  right: 0,
+                                  child: Opacity(
+                                    opacity: _tabBarOpacityAnimation.value,
+                                    child: _buildTabBar(),
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                      ValueListenableBuilder<MusicSection>(
+                        valueListenable: _musicSectionController,
+                        builder: (context, section, child) {
+                          // Скрываем динамическую кнопку в секции артиста
+                          if (section == MusicSection.artist) {
+                            return const SizedBox.shrink();
+                          }
+                          
+                          return AnimatedBuilder(
+                            animation: _tabBarAnimationController,
+                            builder: (context, child) => Positioned(
+                              bottom: _tabBarBottomAnimation.value,
+                              right: 12,
+                              child: Opacity(
+                                opacity: _tabBarOpacityAnimation.value,
+                                child: ValueListenableBuilder<int>(
+                                  valueListenable: _currentIndexNotifier,
+                                  builder: (context, currentIndex, child) => ValueListenableBuilder<bool>(
+                                    valueListenable: feedScrolledDown,
+                                    builder: (context, scrolledDown, child) => _buildDynamicButton(),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                       MiniPlayer(onMusicTabTap: () => _onTabTapped(1), onTabBarToggle: _onTabBarToggle),
                       ValueListenableBuilder<bool>(
@@ -381,12 +450,11 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
                     ],
                   ),
                 ),
-              ],
-            ),
+
+            ],
           ),
         ),
       ),
-    )
     );
   }
 
@@ -395,7 +463,8 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
       child: SizedBox(
         width: MediaQuery.of(context).size.width * 0.65, // 65% ширины
         height: 50, // тонкая сигаретка
-        child: LiquidGlassLayer(
+        child: GlassModeWrapper(
+          borderRadius: 25,
           settings: const LiquidGlassSettings(
             thickness: 15,
             glassColor: Color(0x33FFFFFF),
@@ -406,39 +475,81 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
             blur: 4,
             refractiveIndex: 1.8,
           ),
-        child: LiquidGlass(
-          shape: LiquidRoundedSuperellipse(borderRadius: 25),
           child: ValueListenableBuilder<int>(
             valueListenable: _currentIndexNotifier,
             builder: (context, currentIndex, child) => Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildTabIcon(0, CupertinoIcons.person),
-                BlocBuilder<PlaybackBloc, PlaybackState>(
-                  builder: (context, state) => _buildMusicTabIcon(state),
+                _buildTabIcon(0, Icons.person),
+                StreamBuilder<({bool hasTrack, bool playing, double progress})>(
+                  stream: () {
+                    final handler = AudioServiceManager.getHandler();
+
+                    // Используем handler напрямую для mediaItem, если доступен (более надежно)
+                    Stream<MediaItem?> mediaItemStream;
+                    if (handler != null) {
+                      final initialMediaItem = handler.mediaItem.valueOrNull;
+                      mediaItemStream = handler.mediaItem.startWith(initialMediaItem);
+                    } else {
+                      // Fallback when handler is not available - create a stream that emits null initially
+                      mediaItemStream = Stream.value(null);
+                    }
+
+                    // Используем handler напрямую для playing, если доступен (более надежно)
+                    Stream<bool> playingStream;
+                    if (handler != null) {
+                      final initialPlaying = handler.playbackState.valueOrNull?.playing ?? false;
+                      playingStream = handler.playbackState
+                          .map((state) => state.playing)
+                          .distinct()
+                          .startWith(initialPlaying);
+                    } else {
+                      // Fallback when handler is not available - create a stream that emits false initially
+                      playingStream = Stream.value(false);
+                    }
+                    
+                    return Rx.combineLatest3<MediaItem?, bool, Duration, ({bool hasTrack, bool playing, double progress})>(
+                      mediaItemStream,
+                      playingStream,
+                      AudioService.position.startWith(Duration.zero),
+                      (mediaItem, playing, position) {
+                        final duration = mediaItem?.duration;
+                        final progress = (duration != null && duration.inSeconds > 0)
+                            ? position.inSeconds / duration.inSeconds
+                            : 0.0;
+                        final hasTrack = mediaItem != null;
+                        return (hasTrack: hasTrack, playing: playing, progress: progress);
+                      },
+                    );
+                  }(),
+                  builder: (context, snapshot) {
+                    final data = snapshot.data ?? (hasTrack: false, playing: false, progress: 0.0);
+                    // Показываем кружок, если есть трек (независимо от playing)
+                    return _buildMusicTabIcon(data.hasTrack, data.progress, data.playing);
+                  },
                 ),
-                _buildTabIcon(2, CupertinoIcons.news),
-                _buildTabIcon(3, CupertinoIcons.chat_bubble_2),
-                _buildTabIcon(4, CupertinoIcons.square_grid_2x2),
+                _buildTabIcon(2, Icons.newspaper),
+                _buildTabIcon(3, Icons.chat_bubble_outline),
+                _buildTabIcon(4, Icons.grid_view),
               ],
             ),
           ),
-        ),
         ),
       ),
     );
   }
 
-  Widget _buildMusicTabIcon(PlaybackState state) {
+  Widget _buildMusicTabIcon(bool hasTrack, double progress, bool isPlaying) {
     final isSelected = _currentIndexNotifier.value == 1;
-
-    return CupertinoButton(
+    return IconButton(
       padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
       onPressed: () => _onTabTapped(1),
-      child: Icon(
-        CupertinoIcons.music_note,
+      icon: Icon(
+        Icons.music_note,
         size: 24,
-        color: isSelected ? context.dynamicPrimaryColor : AppColors.textSecondary,
+        // Используем динамический цвет для активной вкладки, как у других табов
+        color: isSelected ? context.dynamicPrimaryColor : Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }
@@ -447,65 +558,53 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
     final isSelected = _currentIndexNotifier.value == index;
 
     if (index == 3) {
-      return ValueListenableBuilder<int>(
-        valueListenable: _unreadMessagesCount,
-        builder: (context, unreadCount, child) {
+      return BlocSelector<MessagesBloc, MessagesState, int>(
+        selector: (state) => state.totalUnreadCount,
+        builder: (context, unreadCount) {
           debugPrint('MainTabs: Messages badge - unreadCount: $unreadCount');
-          return CupertinoButton(
+          return IconButton(
             padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
             onPressed: () => _onTabTapped(index),
-            child: Stack(
-              children: [
-                Icon(
-                  icon,
-                  size: 24,
-                  color: isSelected ? context.dynamicPrimaryColor : AppColors.textSecondary,
+            icon: Badge(
+              isLabelVisible: unreadCount > 0,
+              label: Text(
+                unreadCount > 99 ? '99+' : unreadCount.toString(),
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
                 ),
-                if (unreadCount > 0)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: context.dynamicPrimaryColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      child: Text(
-                        unreadCount > 99 ? '99+' : unreadCount.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-              ],
+              ),
+              backgroundColor: context.dynamicPrimaryColor,
+              textColor: Theme.of(context).colorScheme.onPrimary,
+              alignment: AlignmentDirectional.topEnd,
+              offset: const Offset(4, -4),
+              child: Icon(
+                icon,
+                size: 24,
+                color: isSelected ? context.dynamicPrimaryColor : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           );
         },
       );
     }
 
-    return CupertinoButton(
+    return IconButton(
       padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
       onPressed: () => _onTabTapped(index),
-      child: Icon(
+      icon: Icon(
         icon,
         size: 24,
-        color: isSelected ? context.dynamicPrimaryColor : AppColors.textSecondary,
+        color: isSelected ? context.dynamicPrimaryColor : Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }
 
   Widget _buildDynamicButton() {
-    return LiquidGlassLayer(
+    return GlassModeWrapper(
+      borderRadius: 25,
       settings: const LiquidGlassSettings(
         thickness: 15,
         glassColor: Color(0x33FFFFFF),
@@ -516,22 +615,95 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
         blur: 4,
         refractiveIndex: 1.8,
       ),
-      child: LiquidGlass(
-        shape: LiquidRoundedSuperellipse(borderRadius: 25),
-        child: SizedBox(
-          width: 50,
-          height: 50,
-          child: CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: _onDynamicButtonPressed,
-            child: Icon(
-              _getDynamicIcon(),
-              size: 24,
-              color: AppColors.bgWhite,
-            ),
+      child: SizedBox(
+        width: 50,
+        height: 50,
+        child: IconButton(
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          onPressed: _onDynamicButtonPressed,
+          icon: Icon(
+            _getDynamicIcon(),
+            size: 24,
+            // Используем цвет неактивных кнопок таб-бара
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildArtistPlayButton() {
+    final handler = AudioServiceManager.getHandler();
+    return StreamBuilder<MediaItem?>(
+      stream: handler?.mediaItem ?? Stream.value(null),
+      builder: (context, snapshot) {
+        final hasTrack = snapshot.hasData && snapshot.data != null;
+        
+        return ValueListenableBuilder<bool>(
+          valueListenable: _isMiniPlayerExpanded,
+          builder: (context, isExpanded, child) {
+            // Скрываем кнопку если мини-плеер открыт или есть трек
+            if (isExpanded || hasTrack) {
+              return const SizedBox.shrink();
+            }
+
+            return BlocBuilder<MusicBloc, MusicState>(
+              builder: (context, state) {
+                final artist = state.currentArtist;
+                final tracks = artist?.tracks ?? [];
+                
+                if (tracks.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
+                return Positioned(
+                  bottom: 16,
+                  left: 12,
+                  right: 12,
+                  child: GlassModeWrapper(
+                    borderRadius: 25,
+                    settings: const LiquidGlassSettings(
+                      thickness: 15,
+                      glassColor: Color(0x33FFFFFF),
+                      lightIntensity: 1.5,
+                      chromaticAberration: 1,
+                      saturation: 1.1,
+                      ambientStrength: 1,
+                      blur: 4,
+                      refractiveIndex: 1.8,
+                    ),
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          context.read<QueueBloc>().add(
+                            QueuePlayTracksRequested(
+                              tracks,
+                              'artist_${artist?.id}',
+                              startIndex: 0,
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Воспроизвести все'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

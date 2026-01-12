@@ -491,6 +491,7 @@ class ProfileService {
             currentUserFollows: data['is_following'] ?? false,
             currentUserIsFriend: data['is_friend'] ?? false,
             followsBack: data['is_followed_by'] ?? false,
+            isSelf: data['is_self'] ?? false,
           );
         } else {
           throw Exception('Invalid follow status response');

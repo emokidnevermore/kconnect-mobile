@@ -7,10 +7,8 @@ library;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import '../../../core/widgets/authorized_cached_network_image.dart';
 import '../../../core/constants.dart';
-import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../features/profile/utils/profile_navigation_utils.dart';
@@ -69,7 +67,7 @@ class PostHeader extends StatelessWidget {
                 height: PostConstants.avatarSize,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.bgCard,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
                 child: ClipOval(
                   child: _userAvatar.isNotEmpty
@@ -79,20 +77,20 @@ class PostHeader extends StatelessWidget {
                           filterQuality: FilterQuality.low,
                           memCacheWidth: 80,
                           memCacheHeight: 80,
-                          placeholder: (context, url) => const CupertinoActivityIndicator(radius: 10),
+                          placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
                           errorWidget: (context, url, error) => CachedNetworkImage(
                             imageUrl: AppConstants.userAvatarPlaceholder,
                             fit: BoxFit.cover,
-                            placeholder: (context, url) => const CupertinoActivityIndicator(radius: 8),
-                            errorWidget: (context, url, error) => const Icon(
-                              CupertinoIcons.person,
-                              color: CupertinoColors.systemGrey,
+                            placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                            errorWidget: (context, url, error) => Icon(
+                              Icons.person,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                           ),
                         )
-                      : const Icon(
-                          CupertinoIcons.person,
-                          color: CupertinoColors.systemGrey,
+                      : Icon(
+                          Icons.person,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                       ),
                     ),
@@ -114,7 +112,7 @@ class PostHeader extends StatelessWidget {
                         if (isPinned) ...[
                           const SizedBox(width: 4),
                           Icon(
-                            CupertinoIcons.pin_fill,
+                            Icons.push_pin,
                             size: 14,
                             color: context.profileAccentColor,
                           ),
@@ -154,9 +152,9 @@ class PostHeader extends StatelessWidget {
                     minHeight: 32,
                   ),
                   icon: Icon(
-                    CupertinoIcons.ellipsis_vertical,
+                    Icons.more_vert,
                     size: 20,
-                    color: AppColors.textSecondary,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   onPressed: () => _showContextMenu(context),
                 ),

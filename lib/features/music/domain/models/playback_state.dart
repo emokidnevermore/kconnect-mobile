@@ -28,6 +28,7 @@ class PlaybackState extends Equatable {
   final bool isBuffering;
   final String? error;
   final int speed;
+  final DateTime? lastUpdated;
 
   const PlaybackState({
     this.currentTrack,
@@ -37,6 +38,7 @@ class PlaybackState extends Equatable {
     this.isBuffering = false,
     this.error,
     this.speed = 1,
+    this.lastUpdated,
   });
 
   // Factory constructors for common states
@@ -92,6 +94,7 @@ class PlaybackState extends Equatable {
   }
 
   // Copy with method
+  /// Поддерживает nullable обновления для явной установки null значений
   PlaybackState copyWith({
     Track? currentTrack,
     Duration? position,
@@ -100,15 +103,19 @@ class PlaybackState extends Equatable {
     bool? isBuffering,
     String? error,
     int? speed,
+    DateTime? lastUpdated,
+    bool clearError = false,
+    bool clearDuration = false,
   }) {
     return PlaybackState(
       currentTrack: currentTrack ?? this.currentTrack,
       position: position ?? this.position,
-      duration: duration ?? this.duration,
+      duration: clearDuration ? null : (duration ?? this.duration),
       status: status ?? this.status,
       isBuffering: isBuffering ?? this.isBuffering,
-      error: error ?? this.error,
+      error: clearError ? null : (error ?? this.error),
       speed: speed ?? this.speed,
+      lastUpdated: lastUpdated ?? DateTime.now(),
     );
   }
 
@@ -121,6 +128,7 @@ class PlaybackState extends Equatable {
         isBuffering,
         error,
         speed,
+        lastUpdated,
       ];
 
   @override

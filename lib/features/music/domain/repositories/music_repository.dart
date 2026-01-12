@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 import '../models/track.dart';
 import '../models/playlist.dart';
 import '../models/artist.dart';
+import '../models/artist_detail.dart';
+import '../models/album.dart';
 
 /// Интерфейс репозитория для музыкального контента
 ///
@@ -13,6 +15,8 @@ abstract class MusicRepository {
   Future<List<Track>> fetchPopularTracks();
   Future<List<Track>> fetchNewTracks();
   Future<List<Artist>> fetchRecommendedArtists();
+  Future<ArtistDetail> fetchArtistDetails(int artistId, {int page = 1, int perPage = 40});
+  Future<List<Album>> fetchArtistAlbums(int artistId);
   Future<PaginatedResponse<Playlist>> fetchMyPlaylists({int page = 1, int perPage = 20});
   Future<PaginatedResponse<Playlist>> fetchPublicPlaylists({int page = 1, int perPage = 20});
 

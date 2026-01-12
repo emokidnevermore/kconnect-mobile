@@ -4,9 +4,8 @@
 /// Поддерживает вход с существующими учетными данными для добавления аккаунта.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:kconnect_mobile/theme/app_colors.dart';
 import 'package:kconnect_mobile/theme/app_gradients.dart';
 import 'package:kconnect_mobile/theme/app_text_styles.dart';
 import 'package:kconnect_mobile/features/auth/presentation/blocs/auth_bloc.dart';
@@ -48,9 +47,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   }
 
   void _showError(String message) {
-    showCupertinoDialog(
+    showDialog(
       context: context,
-      builder: (_) => CupertinoAlertDialog(
+      builder: (_) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: Text(
           'Ошибка',
           style: AppTextStyles.body,
@@ -60,12 +60,12 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           style: AppTextStyles.bodySecondary,
         ),
         actions: [
-          CupertinoDialogAction(
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
             child: Text(
               'ОК',
               style: AppTextStyles.button,
             ),
-            onPressed: () => Navigator.of(context).pop(),
           )
         ],
       ),
@@ -83,27 +83,30 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         }
       },
       builder: (context, state) {
-        return CupertinoPageScaffold(
-          backgroundColor: AppColors.bgDark,
-          navigationBar: CupertinoNavigationBar(
-            backgroundColor: AppColors.bgDark.withValues(alpha:0.8),
-            leading: CupertinoButton(
-              padding: EdgeInsets.zero,
-              child: const Icon(
-                CupertinoIcons.back,
-                color: CupertinoColors.white,
+        return GestureDetector(
+          onTap: () {
+            FocusScope.of(context).unfocus();
+          },
+          behavior: HitTestBehavior.opaque,
+          child: Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            appBar: AppBar(
+              backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+              surfaceTintColor: Colors.transparent,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).pop(),
+                color: Theme.of(context).colorScheme.onSurface,
               ),
-              onPressed: () => Navigator.of(context).pop(),
+              title: Text(
+                'Добавить аккаунт',
+                style: AppTextStyles.h2.copyWith(color: Theme.of(context).colorScheme.onSurface),
+              ),
             ),
-            middle: Text(
-              'Добавить аккаунт',
-              style: AppTextStyles.h2.copyWith(color: AppColors.textPrimary),
-            ),
-          ),
-          child: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
+            body: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(minHeight: constraints.maxHeight),
@@ -113,12 +116,12 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                         children: [
                           ShaderMask(
                             shaderCallback: (bounds) =>
-                                AppGradients.primary.createShader(bounds),
+                                AppGradients.primary(context).createShader(bounds),
                             child: Text(
                               'K-Connect',
                               style: AppTextStyles.h1.copyWith(
                                 fontSize: 36,
-                                color: CupertinoColors.white,
+                                color: Colors.white,
                               ),
                             ),
                           ),
@@ -126,44 +129,38 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                           Text(
                             'Добавьте новый аккаунт',
                             style: AppTextStyles.body.copyWith(
-                              color: AppColors.textSecondary,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 48),
-                          CupertinoTextField(
+                          TextField(
                             controller: _emailCtrl,
-                            placeholder: 'Email или username',
                             style: AppTextStyles.bodyMedium,
-                            placeholderStyle:
-                                AppTextStyles.bodyMedium.copyWith(color: CupertinoColors.systemGrey),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            decoration: BoxDecoration(
-                              color: AppColors.bgCard,
-                              borderRadius: BorderRadius.circular(12),
+                            decoration: const InputDecoration(
+                              hintText: 'Email или username',
                             ),
                           ),
                           const SizedBox(height: 16),
-                          CupertinoTextField(
+                          TextField(
                             controller: _passCtrl,
-                            placeholder: 'Пароль',
                             obscureText: true,
                             style: AppTextStyles.bodyMedium,
-                            placeholderStyle:
-                                AppTextStyles.bodyMedium.copyWith(color: CupertinoColors.systemGrey),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            decoration: BoxDecoration(
-                              color: AppColors.bgCard,
-                              borderRadius: BorderRadius.circular(12),
+                            decoration: const InputDecoration(
+                              hintText: 'Пароль',
                             ),
                           ),
                           const SizedBox(height: 32),
                           state is AuthLoading
-                              ? const CupertinoActivityIndicator()
-                              : CupertinoButton.filled(
-                                  borderRadius: BorderRadius.circular(12),
-                                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+                              ? const CircularProgressIndicator()
+                              : FilledButton(
                                   onPressed: _doLogin,
+                                  style: FilledButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
                                   child: Text('Добавить аккаунт', style: AppTextStyles.button),
                                 ),
                         ],
@@ -173,6 +170,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 );
               },
             ),
+          ),
           ),
         );
       },

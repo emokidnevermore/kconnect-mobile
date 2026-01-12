@@ -3,7 +3,6 @@ import '../../domain/models/auth_user.dart';
 import '../../../../services/api_client/dio_client.dart';
 import '../../../../services/data_clear_service.dart';
 import '../../../../services/storage_service.dart';
-import '../../../../core/utils/cache_utils.dart';
 
 /// Реализация репозитория аутентификации
 ///
@@ -211,11 +210,8 @@ class AuthRepositoryImpl implements AuthRepository {
     // Очищаем настройки персонализации для сброса темы к умолчанию
     await StorageService.clearPersonalizationSettings();
 
-    // Очищаем кэш изображений для полной очистки
-    CacheUtils.clearImageCache();
-
     // Очищаем кэшированные данные пользователя из BLoC состояний
-    _dataClearService.clearAllUserData();
+    await _dataClearService.clearAllUserData();
 
     // Примечание: Здесь можно добавить дополнительный API вызов к серверному эндпоинту logout
     // Например: await _dioClient.post('/api/auth/logout', {});

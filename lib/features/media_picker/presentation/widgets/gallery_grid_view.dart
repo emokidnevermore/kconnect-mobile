@@ -1,8 +1,6 @@
 import 'dart:io';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../theme/app_colors.dart';
 import '../../../../theme/app_text_styles.dart';
 import '../../../../core/utils/theme_extensions.dart';
 import '../blocs/media_picker_bloc.dart';
@@ -119,7 +117,7 @@ class _GalleryGridViewState extends State<GalleryGridView> {
                           cacheWidth: 200,
                           cacheHeight: 200,
                           errorBuilder: (context, error, stackTrace) {
-                            return Container(color: AppColors.bgDark, child: const Icon(CupertinoIcons.exclamationmark_triangle, color: Colors.white));
+                            return Container(color: Theme.of(context).colorScheme.surface, child: const Icon(Icons.warning, color: Colors.white));
                           },
                         ),
                       ),
@@ -164,7 +162,7 @@ class _GalleryGridViewState extends State<GalleryGridView> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Icon(
-                          CupertinoIcons.video_camera,
+                          Icons.videocam,
                           size: 12,
                           color: Colors.white,
                         ),
@@ -197,19 +195,19 @@ class _GalleryGridViewState extends State<GalleryGridView> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            CupertinoIcons.photo,
+            Icons.photo_library,
             size: 48,
-            color: AppColors.textSecondary,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
           const SizedBox(height: 16),
           Text(
             'Фото и видео не найдены',
-            style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
+            style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface),
           ),
           const SizedBox(height: 8),
           Text(
             'Добавьте фото и видео в галерею устройства',
-            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+            style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
             textAlign: TextAlign.center,
           ),
         ],
@@ -221,11 +219,11 @@ class _GalleryGridViewState extends State<GalleryGridView> {
   Widget _buildLoadingIndicator() {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.bgDark.withValues(alpha: 0.5),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
       ),
       child: const Center(
-        child: CupertinoActivityIndicator(),
+        child: CircularProgressIndicator(),
       ),
     );
   }

@@ -4,9 +4,8 @@
 /// просмотра профилей других пользователей.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../theme/app_colors.dart';
 
 /// Виджет заголовка экрана чужого профиля
 ///
@@ -30,10 +29,10 @@ class ProfileScreenHeader extends StatelessWidget {
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: AppColors.bgDark.withValues(alpha:0.8),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
         border: Border(
           bottom: BorderSide(
-            color: AppColors.textSecondary.withValues(alpha: 0.1),
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
             width: 1,
           ),
         ),
@@ -41,10 +40,12 @@ class ProfileScreenHeader extends StatelessWidget {
       child: Row(
         children: [
           // Back button with accent color
-          GestureDetector(
-            onTap: onBackPressed,
-            child: Icon(
-              CupertinoIcons.arrow_left,
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: onBackPressed,
+            icon: Icon(
+              Icons.arrow_back,
               color: accentColor,
               size: 24,
             ),

@@ -8,6 +8,7 @@ class SubscriptionInfo {
   final DateTime expiresAt;
   final double totalDurationMonths;
   final bool active;
+  final bool isLifetime;
 
   const SubscriptionInfo({
     required this.type,
@@ -15,6 +16,7 @@ class SubscriptionInfo {
     required this.expiresAt,
     required this.totalDurationMonths,
     required this.active,
+    this.isLifetime = false,
   });
 
   factory SubscriptionInfo.fromJson(Map<String, dynamic> json) {
@@ -24,6 +26,7 @@ class SubscriptionInfo {
       expiresAt: DateTime.parse(json['expires_at'] ?? DateTime.now().toIso8601String()),
       totalDurationMonths: (json['total_duration_months'] ?? 0).toDouble(),
       active: json['active'] ?? false,
+      isLifetime: json['is_lifetime'] ?? false,
     );
   }
 
@@ -34,6 +37,7 @@ class SubscriptionInfo {
       'expires_at': expiresAt.toIso8601String(),
       'total_duration_months': totalDurationMonths,
       'active': active,
+      'is_lifetime': isLifetime,
     };
   }
 }

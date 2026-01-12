@@ -4,7 +4,7 @@
 /// Поддерживает нажатие для навигации к деталям плейлиста.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../core/utils/image_utils.dart';
 import '../domain/models/playlist.dart';
@@ -42,6 +42,7 @@ class PlaylistCard extends StatelessWidget {
             // Cover image
             ImageUtils.buildAlbumArt(
               _getCoverUrl(coverImage),
+              context,
               width: 160,
               height: 160,
               fit: BoxFit.cover,

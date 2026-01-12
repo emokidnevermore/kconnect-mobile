@@ -1,7 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../../theme/app_colors.dart';
 import '../../../../theme/app_text_styles.dart';
 
 /// Кастомное контекстное меню для поля ввода поста с поддержкой markdown форматирования
@@ -116,28 +114,32 @@ class MarkdownContextMenu extends StatelessWidget {
     required VoidCallback onPressed,
     bool isDestructive = false,
   }) {
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    return TextButton(
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
       onPressed: onPressed,
       child: Text(
         label,
         style: AppTextStyles.bodySecondary.copyWith(
           color: isDestructive
-              ? CupertinoColors.destructiveRed
-              : AppColors.textPrimary,
+              ? Colors.red
+              : Theme.of(context).colorScheme.onSurface,
         ),
       ),
     );
   }
 
   Widget _buildFormatButton(String label, String prefix, String suffix) {
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    return TextButton(
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
       onPressed: () => _applyFormatting(prefix, suffix),
       child: Text(
         label,
         style: AppTextStyles.bodySecondary.copyWith(
-          color: AppColors.textPrimary,
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
     );

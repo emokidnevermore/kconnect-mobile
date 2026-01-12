@@ -17,12 +17,14 @@ abstract class ThemeState extends Equatable {
 class ThemeInitial extends ThemeState {}
 
 class ThemeLoaded extends ThemeState {
-  final MaterialColor accentColor;
+  final ColorScheme colorScheme;
 
-  const ThemeLoaded(this.accentColor);
+  const ThemeLoaded(this.colorScheme);
 
-  Color get primaryColor => accentColor;
+  Color get primaryColor => colorScheme.primary;
+  
+  Color get accentColor => colorScheme.primary;
 
   @override
-  List<Object> get props => [accentColor];
+  List<Object> get props => [colorScheme];
 }

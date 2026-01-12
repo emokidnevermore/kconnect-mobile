@@ -5,13 +5,12 @@
 /// Управляет состоянием комментариев через FeedBloc.
 library;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/widgets/authorized_cached_network_image.dart';
 import '../../../core/constants.dart';
-import '../../../theme/app_colors.dart';
 import '../../../core/utils/theme_extensions.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../core/utils/date_utils.dart' as date_utils;
@@ -50,7 +49,7 @@ class CustomScrollPhysics extends BouncingScrollPhysics {
 /// Основной контейнер для комментариев поста
 ///
 /// Содержит список комментариев и поле ввода нового комментария.
-/// Высота увеличена до 65% экрана для лучшего использования пространства.
+/// Используется в Material 3 BottomSheet.
 class CommentsBody extends StatelessWidget {
   /// ID поста, комментарии которого отображаются
   final int postId;
@@ -58,30 +57,45 @@ class CommentsBody extends StatelessWidget {
   /// Объект поста (может использоваться для дополнительной информации)
   final Post post;
 
-  const CommentsBody({super.key, required this.postId, required this.post});
+  /// ScrollController для прокрутки списка комментариев
+  final ScrollController? scrollController;
+
+  const CommentsBody({
+    super.key,
+    required this.postId,
+    required this.post,
+    this.scrollController,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<FeedBloc, FeedState>(
-      builder: (context, state) {
-        final comments = state.comments;
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      behavior: HitTestBehavior.opaque,
+      child: BlocBuilder<FeedBloc, FeedState>(
+        builder: (context, state) {
+          final comments = state.comments;
 
-        return SizedBox(
-          height: MediaQuery.of(context).size.height * 0.6,
-          child: Column(
+          return Column(
             children: [
               Expanded(
                 child: CommentsList(
                   postId: postId,
                   comments: comments,
                   commentsStatus: state.commentsStatus,
+                  scrollController: scrollController,
                 ),
               ),
-              CommentsInput(postId: postId),
+              CommentsInput(
+                postId: postId,
+                scrollController: scrollController,
+              ),
             ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -100,11 +114,15 @@ class CommentsList extends StatefulWidget {
   /// Статус загрузки комментариев
   final CommentsStatus commentsStatus;
 
+  /// ScrollController для прокрутки списка
+  final ScrollController? scrollController;
+
   const CommentsList({
     super.key,
     required this.postId,
     required this.comments,
     required this.commentsStatus,
+    this.scrollController,
   });
 
   @override
@@ -112,7 +130,7 @@ class CommentsList extends StatefulWidget {
 }
 
 class _CommentsListState extends State<CommentsList> {
-  final ScrollController _scrollController = ScrollController();
+  late final ScrollController _scrollController;
   final Map<String, String> _preprocessedCache = {};
 
   String _preprocessText(String text) {
@@ -129,12 +147,16 @@ class _CommentsListState extends State<CommentsList> {
   @override
   void initState() {
     super.initState();
+    _scrollController = widget.scrollController ?? ScrollController();
     context.read<FeedBloc>().add(LoadCommentsEvent(widget.postId));
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    // Dispose only if we created the controller ourselves
+    if (widget.scrollController == null) {
+      _scrollController.dispose();
+    }
     super.dispose();
   }
 
@@ -148,7 +170,7 @@ class _CommentsListState extends State<CommentsList> {
     final currentUserId = authState is AuthAuthenticated ? int.tryParse(authState.user.id) : null;
 
     if (widget.commentsStatus == CommentsStatus.loading && widget.comments.isEmpty) {
-      return const Center(child: CupertinoActivityIndicator());
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (widget.commentsStatus == CommentsStatus.failure) {
@@ -175,7 +197,8 @@ class _CommentsListState extends State<CommentsList> {
             itemBuilder: (context, index) {
               final comment = commentTree[index];
               final isProcessing = feedState.processingCommentLikes.contains(comment.id);
-              return CommentThread(
+              return _AnimatedCommentThread(
+                index: index,
                 comment: comment,
                 currentUserId: currentUserId,
                 preprocessText: _preprocessText,
@@ -194,15 +217,15 @@ class _CommentsListState extends State<CommentsList> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            CupertinoIcons.exclamationmark_triangle,
+            Icons.warning,
             size: 48,
-            color: CupertinoColors.systemGrey,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
           const SizedBox(height: 16),
           Text(
             'Не удалось загрузить комментарии',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: CupertinoColors.systemGrey,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             textAlign: TextAlign.center,
           ),
@@ -213,19 +236,132 @@ class _CommentsListState extends State<CommentsList> {
               child: Text(
                 context.read<FeedBloc>().state.commentsError!,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: CupertinoColors.systemGrey2,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
               ),
             ),
           const SizedBox(height: 24),
-          CupertinoButton.filled(
+          FilledButton(
             onPressed: () {
               context.read<FeedBloc>().add(LoadCommentsEvent(widget.postId));
             },
             child: const Text('Попробовать снова'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Animated wrapper для CommentThread с staggered animation
+class _AnimatedCommentThread extends StatefulWidget {
+  final int index;
+  final Comment comment;
+  final int? currentUserId;
+  final String Function(String) preprocessText;
+  final bool isProcessing;
+
+  const _AnimatedCommentThread({
+    required this.index,
+    required this.comment,
+    required this.currentUserId,
+    required this.preprocessText,
+    this.isProcessing = false,
+  });
+
+  @override
+  State<_AnimatedCommentThread> createState() => _AnimatedCommentThreadState();
+}
+
+class _AnimatedCommentThreadState extends State<_AnimatedCommentThread>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    
+    // Ограничиваем количество анимируемых комментариев
+    // Анимируем только первые 30 комментариев, остальные показываем сразу
+    if (widget.index > 30) {
+      _controller.value = 1.0; // Сразу показываем комментарий
+      _fadeAnimation = AlwaysStoppedAnimation(1.0);
+      _slideAnimation = AlwaysStoppedAnimation(Offset.zero);
+    } else {
+      final delay = widget.index * 50; // Stagger delay
+      final animationDuration = _controller.duration!.inMilliseconds;
+      // Ограничиваем begin значением 0.0, чтобы избежать ошибки Interval
+      // Используем минимум между delay/400 и 0.8, чтобы оставить место для анимации
+      final intervalStart = (delay / animationDuration).clamp(0.0, 0.8);
+      final intervalEnd = 1.0;
+      
+      _fadeAnimation = Tween<double>(
+        begin: 0.0,
+        end: 1.0,
+      ).animate(
+        CurvedAnimation(
+          parent: _controller,
+          curve: Interval(
+            intervalStart,
+            intervalEnd,
+            curve: Curves.easeOut,
+          ),
+        ),
+      );
+      
+      _slideAnimation = Tween<Offset>(
+        begin: const Offset(0.3, 0),
+        end: Offset.zero,
+      ).animate(
+        CurvedAnimation(
+          parent: _controller,
+          curve: Interval(
+            intervalStart,
+            intervalEnd,
+            curve: Curves.easeOutCubic,
+          ),
+        ),
+      );
+      
+      // Start animation with delay, но не больше длительности анимации
+      final actualDelay = delay.clamp(0, animationDuration);
+      if (actualDelay > 0) {
+        Future.delayed(Duration(milliseconds: actualDelay), () {
+          if (mounted && _controller.status != AnimationStatus.completed) {
+            _controller.forward();
+          }
+        });
+      } else {
+        _controller.forward();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: CommentThread(
+          comment: widget.comment,
+          currentUserId: widget.currentUserId,
+          preprocessText: widget.preprocessText,
+          isProcessing: widget.isProcessing,
+        ),
       ),
     );
   }
@@ -307,12 +443,8 @@ class CommentItem extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.overlayDark.withValues(alpha: 0.3),
-          width: 0.5,
-        ),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -329,7 +461,7 @@ class CommentItem extends StatelessWidget {
                   height: 32,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.bgCard,
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   ),
                   child: ClipOval(
                     child: AuthorizedCachedNetworkImage(
@@ -338,10 +470,13 @@ class CommentItem extends StatelessWidget {
                       filterQuality: FilterQuality.low,
                       memCacheWidth: 64,
                       memCacheHeight: 64,
-                      placeholder: (context, url) => const CupertinoActivityIndicator(radius: 8),
-                      errorWidget: (context, url, error) => Image.network(
-                        AppConstants.userAvatarPlaceholder,
+                      placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                      errorWidget: (context, url, error) => CachedNetworkImage(
+                        imageUrl: AppConstants.userAvatarPlaceholder,
                         fit: BoxFit.cover,
+                        width: 64,
+                        height: 64,
+                        filterQuality: FilterQuality.low,
                       ),
                     ),
                   ),
@@ -373,13 +508,14 @@ class CommentItem extends StatelessWidget {
                         ),
                         const Spacer(),
                         if (comment.userId == currentUserId)
-                          CupertinoButton(
+                          IconButton(
                             padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
                             onPressed: () => context.read<FeedBloc>().add(DeleteCommentEvent(comment.id)),
-                            child: Icon(
-                              CupertinoIcons.trash,
+                            icon: Icon(
+                              Icons.delete,
                               size: 14,
-                              color: AppColors.textSecondary,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                           ),
                       ],
@@ -411,14 +547,14 @@ class CommentItem extends StatelessWidget {
                     width: double.infinity,
                     fit: BoxFit.cover,
                     filterQuality: FilterQuality.low,
-                    placeholder: (context, url) => const CupertinoActivityIndicator(radius: 8),
+                    placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
                     errorWidget: (context, url, error) => Container(
                       height: 120,
-                      color: AppColors.bgCard,
-                      child: const Center(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: Center(
                         child: Icon(
-                          CupertinoIcons.exclamationmark_triangle,
-                          color: CupertinoColors.systemGrey,
+                          Icons.warning,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -440,16 +576,16 @@ class CommentItem extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        CupertinoIcons.arrowshape_turn_up_left,
+                        Icons.reply,
                         size: 16,
-                        color: AppColors.textSecondary,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         'Ответить',
                         style: AppTextStyles.postStats.copyWith(
                           fontSize: 11,
-                          color: AppColors.textSecondary,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -462,18 +598,18 @@ class CommentItem extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       isProcessing
-                          ? const CupertinoActivityIndicator(radius: 6)
+                          ? const CircularProgressIndicator(strokeWidth: 2)
                           : Icon(
-                              CupertinoIcons.heart,
+                              Icons.favorite,
                               size: 16,
-                              color: isLiked ? context.dynamicPrimaryColor : AppColors.textSecondary,
+                              color: isLiked ? context.dynamicPrimaryColor : Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                       const SizedBox(width: 4),
                       Text(
                         '$likesCount',
                         style: AppTextStyles.postStats.copyWith(
                           fontSize: 11,
-                          color: isLiked ? context.dynamicPrimaryColor : AppColors.textSecondary,
+                          color: isLiked ? context.dynamicPrimaryColor : Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -490,8 +626,13 @@ class CommentItem extends StatelessWidget {
 
 class CommentsInput extends StatefulWidget {
   final int postId;
+  final ScrollController? scrollController;
 
-  const CommentsInput({super.key, required this.postId});
+  const CommentsInput({
+    super.key,
+    required this.postId,
+    this.scrollController,
+  });
 
   @override
   State<CommentsInput> createState() => _CommentsInputState();
@@ -511,61 +652,70 @@ class _CommentsInputState extends State<CommentsInput> {
     if (text.isNotEmpty) {
       context.read<FeedBloc>().add(AddCommentEvent(widget.postId, text));
       _commentController.clear();
+      
+      // Smooth scroll to top (newest comment is first)
+      if (widget.scrollController != null && widget.scrollController!.hasClients) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (widget.scrollController != null && widget.scrollController!.hasClients) {
+            widget.scrollController!.animateTo(
+              0.0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: AppColors.overlayDark, width: 1),
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainer,
+          border: Border(
+            top: BorderSide(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppColors.bgDark.withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: AppColors.bgWhite.withValues(alpha: 0.1),
-                ),
-              ),
-              child: CupertinoTextField(
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
                 controller: _commentController,
-                placeholder: 'Написать комментарий...',
-                placeholderStyle: TextStyle(
-                  color: AppColors.bgWhite.withValues(alpha: 0.5),
+                decoration: InputDecoration(
+                  hintText: 'Написать комментарий...',
+                  border: InputBorder.none,
                 ),
                 style: AppTextStyles.postContent.copyWith(
-                  color: AppColors.bgWhite,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
                 maxLines: 3,
                 minLines: 1,
-                decoration: const BoxDecoration(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
               ),
             ),
-          ),
           const SizedBox(width: 8),
           Container(
             decoration: BoxDecoration(
               color: context.dynamicPrimaryColor,
               shape: BoxShape.circle,
             ),
-            child: CupertinoButton(
+            child: IconButton(
               padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
               onPressed: _addComment,
-              child: const Padding(
+              icon: const Padding(
                 padding: EdgeInsets.all(12),
                 child: Icon(
-                  CupertinoIcons.paperplane,
+                  Icons.send,
                   color: Colors.white,
                   size: 18,
                 ),
@@ -574,6 +724,7 @@ class _CommentsInputState extends State<CommentsInput> {
           ),
         ],
       ),
+    )
     );
   }
 }

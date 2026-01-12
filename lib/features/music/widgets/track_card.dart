@@ -5,8 +5,7 @@
 /// Используется в секциях музыки для показа треков.
 library;
 
-import 'package:flutter/cupertino.dart';
-import '../../../theme/app_colors.dart';
+import 'package:flutter/material.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/theme_extensions.dart';
@@ -40,83 +39,97 @@ class TrackCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 160,
-        height: 220,
+      child: Card(
         margin: const EdgeInsets.only(right: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Album art with overlay
-            Stack(
-              children: [
-                ImageUtils.buildAlbumArt(
-                  ImageUtils.getCompleteImageUrl(albumArt),
-                  width: 160,
-                  height: 160,
-                  fit: BoxFit.cover,
-                ),
-                // Genre badge top-left
-                if (genre != null && genre.isNotEmpty)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.bgDark.withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(4),
+        clipBehavior: Clip.antiAlias,
+        color: Colors.transparent,
+        elevation: 0,
+        child: SizedBox(
+          width: 160,
+          height: 220,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Album art with overlay
+              Stack(
+                children: [
+                  ImageUtils.buildAlbumArt(
+                    ImageUtils.getCompleteImageUrl(albumArt),
+                    context,
+                    width: 160,
+                    height: 160,
+                    fit: BoxFit.cover,
+                  ),
+                  // Genre badge top-left
+                  if (genre != null && genre.isNotEmpty)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: FilterChip(
+                        label: Text(
+                          genre,
+                          style: AppTextStyles.bodySecondary.copyWith(
+                            fontSize: 10,
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+                        labelStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        onSelected: (_) {},
                       ),
-                      child: Text(
-                        genre,
-                        style: AppTextStyles.bodySecondary.copyWith(
-                          fontSize: 10,
-                          color: AppColors.textPrimary,
+                    ),
+
+                  // Verified badge top-right
+                  if (verified)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Badge(
+                        backgroundColor: context.dynamicPrimaryColor,
+                        child: Icon(
+                          Icons.check_circle,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.onPrimary,
                         ),
                       ),
                     ),
-                  ),
 
-                // Verified badge top-right
-                if (verified)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: context.dynamicPrimaryColor,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.checkmark_alt,
-                        size: 12,
-                        color: AppColors.bgWhite,
-                      ),
-                    ),
-                  ),
-
-              ],
-            ),
-            // Title
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: AppTextStyles.bodyMedium.copyWith(
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
+                ],
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            // Artist (single line to save space)
-            Text(
-              artist,
-              style: AppTextStyles.bodySecondary.copyWith(fontSize: 12),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+              // Title
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  title,
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // Artist (single line to save space)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  artist,
+                  style: AppTextStyles.bodySecondary.copyWith(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

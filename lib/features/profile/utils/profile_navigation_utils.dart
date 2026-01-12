@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../../../routes/route_names.dart';
 
 /// Утилитарный класс для обработки навигации по профилям с кастомными переходами
@@ -61,7 +62,7 @@ abstract class ProfileNavigationUtils {
       builder: (context) => Container(
         height: 400,
         decoration: BoxDecoration(
-          color: CupertinoColors.systemBackground,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(20),
             topRight: Radius.circular(20),
@@ -76,7 +77,7 @@ abstract class ProfileNavigationUtils {
               style: const TextStyle(fontSize: 18),
             ),
             const Spacer(),
-            CupertinoButton.filled(
+            FilledButton(
               onPressed: () => navigateToProfile(context, username),
               child: const Text('Посмотреть полный профиль'),
             ),

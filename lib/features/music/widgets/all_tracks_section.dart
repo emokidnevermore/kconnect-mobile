@@ -5,14 +5,14 @@
 /// Включает состояния загрузки, ошибки и пустого списка.
 library;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../theme/app_colors.dart';
+import '../../../../core/widgets/staggered_list_item.dart';
+import '../../../../core/widgets/custom_refresh_indicator.dart';
 import '../../../core/utils/theme_extensions.dart';
 import '../../../theme/app_text_styles.dart';
+import '../../../services/cache/audio_preload_service.dart';
 import '../domain/models/track.dart';
-import '../presentation/blocs/playback_bloc.dart';
 import '../presentation/blocs/queue_bloc.dart';
 import '../presentation/blocs/queue_event.dart';
 import '../presentation/blocs/music_bloc.dart';
@@ -33,6 +33,8 @@ class _AllTracksSectionState extends State<AllTracksSection> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoadingMore = false;
   DateTime? _lastLoadMoreTime;
+  final AudioPreloadService _preloadService = AudioPreloadService.instance;
+  int _lastPreloadedEndIndex = -1;
 
   /// Инициализация виджета
   @override
@@ -46,9 +48,18 @@ class _AllTracksSectionState extends State<AllTracksSection> {
         final musicBloc = context.read<MusicBloc>();
         if (musicBloc.state.allTracks.isEmpty && musicBloc.state.allTracksStatus == MusicLoadStatus.initial) {
           musicBloc.add(MusicAllTracksPaginatedFetched());
+        } else {
+          // Предзагружаем первые видимые треки
+          _preloadVisibleTracks();
         }
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   /// Обработчик прокрутки для бесконечной загрузки
@@ -59,6 +70,9 @@ class _AllTracksSectionState extends State<AllTracksSection> {
         now.difference(_lastLoadMoreTime!) < const Duration(milliseconds: 300)) {
       return;
     }
+
+    // Предзагрузка видимых треков
+    _preloadVisibleTracks();
 
     // Порог предварительной загрузки: начать загрузку за 300px от конца (против 200px)
     // Это дает больше времени для загрузки данных до того, как пользователь достигнет конца
@@ -85,6 +99,36 @@ class _AllTracksSectionState extends State<AllTracksSection> {
     }
   }
 
+  /// Предзагружает видимые треки
+  void _preloadVisibleTracks() {
+    final musicBloc = context.read<MusicBloc>();
+    final state = musicBloc.state;
+    
+    if (state.allTracks.isEmpty) return;
+
+    // Вычисляем видимые индексы на основе позиции прокрутки
+    // Приблизительно: каждый элемент ~80px высотой
+    const itemHeight = 80.0;
+    final scrollOffset = _scrollController.position.pixels;
+    final viewportHeight = _scrollController.position.viewportDimension;
+    
+    final startIndex = (scrollOffset / itemHeight).floor();
+    final endIndex = ((scrollOffset + viewportHeight) / itemHeight).ceil() + 3; // +3 для предзагрузки вперед
+    
+    final clampedStart = startIndex.clamp(0, state.allTracks.length);
+    final clampedEnd = endIndex.clamp(0, state.allTracks.length);
+    
+    // Предзагружаем только если диапазон изменился
+    if (clampedEnd > _lastPreloadedEndIndex) {
+      _preloadService.preloadVisibleTracks(
+        state.allTracks,
+        clampedStart,
+        clampedEnd,
+      );
+      _lastPreloadedEndIndex = clampedEnd;
+    }
+  }
+
   /// Построение виджета с реакцией на изменения состояния
   @override
   Widget build(BuildContext context) {
@@ -99,7 +143,7 @@ class _AllTracksSectionState extends State<AllTracksSection> {
   Widget _buildContent(MusicState state) {
     if (state.allTracksStatus == MusicLoadStatus.loading && state.allTracks.isEmpty) {
       return const Center(
-        child: CupertinoActivityIndicator(),
+        child: CircularProgressIndicator(),
       );
     }
 
@@ -108,24 +152,24 @@ class _AllTracksSectionState extends State<AllTracksSection> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              CupertinoIcons.exclamationmark_triangle,
+            Icon(
+              Icons.warning,
               size: 48,
-              color: AppColors.textSecondary,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
             Text(
               'Ошибка загрузки',
-              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary),
+              style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurface),
             ),
             const SizedBox(height: 8),
-            CupertinoButton(
+            TextButton(
               onPressed: () {
                 context.read<MusicBloc>().add(MusicAllTracksPaginatedFetched());
               },
               child: Text(
                 'Повторить',
-                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primaryPurple),
+                style: AppTextStyles.bodyMedium.copyWith(color: context.dynamicPrimaryColor),
               ),
             ),
           ],
@@ -138,15 +182,15 @@ class _AllTracksSectionState extends State<AllTracksSection> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              CupertinoIcons.music_note,
+            Icon(
+              Icons.music_note,
               size: 48,
-              color: AppColors.textSecondary,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
             Text(
               'Треки не найдены',
-              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary),
+              style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurface),
               textAlign: TextAlign.center,
             ),
           ],
@@ -154,7 +198,7 @@ class _AllTracksSectionState extends State<AllTracksSection> {
       );
     }
 
-    return RefreshIndicator(
+    return CustomRefreshIndicator(
       onRefresh: () async {
         context.read<MusicBloc>().add(MusicAllTracksPaginatedFetched(forceRefresh: true));
       },
@@ -162,25 +206,29 @@ class _AllTracksSectionState extends State<AllTracksSection> {
       child: CustomScrollView(
         controller: _scrollController,
         slivers: [
+          // Отступ сверху под хедер
+          const SliverToBoxAdapter(
+            child: SizedBox(height: 52),
+          ),
           SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 if (index == state.allTracks.length) {
                   // Индикатор загрузки в конце списка
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(
-                      child: CupertinoActivityIndicator(),
-                    ),
+                  return const ProgressiveLoadingIndicator(
+                    message: 'Загрузка треков...',
                   );
                 }
 
                 final track = state.allTracks[index];
-                return TrackListItem(
-                  key: ValueKey(track.id),
-                  track: track,
-                  onTap: () => _onTrackPlay(track, state.allTracks),
-                  onLike: () => _onTrackLike(track),
+                return StaggeredListItem(
+                  index: index,
+                  child: TrackListItem(
+                    key: ValueKey(track.id),
+                    track: track,
+                    onTap: () => _onTrackPlay(track, state.allTracks),
+                    onLike: () => _onTrackLike(track),
+                  ),
                 );
               },
               childCount: state.allTracks.length + (state.allTracksHasNextPage ? 1 : 0),
@@ -203,16 +251,16 @@ class _AllTracksSectionState extends State<AllTracksSection> {
   /// Обработчик воспроизведения трека
   ///
   /// Создает очередь со всеми треками и начинает воспроизведение выбранного трека
+  /// Воспроизведение запускается автоматически через MediaPlayerService
   void _onTrackPlay(Track track, List<Track> allTracks) {
     try {
       // Создание очереди со всеми треками
+      // Воспроизведение запустится автоматически через MediaPlayerService
+      // когда очередь синхронизируется с audio_service
       final trackIndex = allTracks.indexWhere((t) => t.id == track.id);
       if (trackIndex != -1) {
         context.read<QueueBloc>().add(QueuePlayTracksRequested(allTracks, 'allTracks', startIndex: trackIndex));
       }
-
-      // Воспроизведение трека
-      context.read<PlaybackBloc>().add(PlaybackPlayRequested(track));
     } catch (e) {
       // Обработка ошибки без показа пользователю
     }

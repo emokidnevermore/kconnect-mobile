@@ -1,10 +1,10 @@
 //feed_screen
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../theme/app_colors.dart';
 import '../../core/utils/theme_extensions.dart';
+import '../../core/widgets/staggered_list_item.dart';
+import '../../core/widgets/custom_refresh_indicator.dart';
 import '../../features/auth/presentation/blocs/auth_bloc.dart';
 import '../../features/auth/presentation/blocs/auth_state.dart';
 import 'presentation/blocs/feed_bloc.dart';
@@ -12,8 +12,6 @@ import 'presentation/blocs/feed_event.dart';
 import 'presentation/blocs/feed_state.dart';
 import 'components/post_card_new.dart';
 import 'widgets/online_users_bar.dart';
-
-import 'widgets/post_shimmer.dart';
 import 'components/feed_scroll_mixin.dart';
 
 /// Thin loading bar with shimmer animation
@@ -146,11 +144,11 @@ class _FeedScreenState extends State<FeedScreen> with AutomaticKeepAliveClientMi
         builder: (context, authState) {
           // Show loading while auth is being checked
           if (authState is AuthLoading || authState is AuthInitial) {
-            return CupertinoPageScaffold(
-              backgroundColor: AppColors.bgDark,
-              child: const SafeArea(
+            return Scaffold(
+              backgroundColor: Colors.transparent,
+              body: const SafeArea(
                 child: Center(
-                  child: CupertinoActivityIndicator(radius: 20),
+                  child: CircularProgressIndicator(strokeWidth: 3),
                 ),
               ),
             );
@@ -165,60 +163,17 @@ class _FeedScreenState extends State<FeedScreen> with AutomaticKeepAliveClientMi
           if (authState is AuthAuthenticated) {
             return BlocListener<FeedBloc, FeedState>(
               listener: (context, state) {
-                // Show error snackbar if we have posts and an error occurred
-                if (state.error != null && state.posts.isNotEmpty && state.status == FeedStatus.success) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            children: [
-                              const Icon(
-                                CupertinoIcons.exclamationmark_triangle,
-                                color: CupertinoColors.white,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Не удалось обновить ленту',
-                                  style: const TextStyle(color: CupertinoColors.white),
-                                ),
-                              ),
-                              CupertinoButton(
-                                padding: EdgeInsets.zero,
-                                onPressed: () {
-                                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                                  context.read<FeedBloc>().add(RefreshFeedEvent());
-                                }, minimumSize: Size(0, 0),
-                                child: const Text(
-                                  'Повторить',
-                                  style: TextStyle(
-                                    color: CupertinoColors.activeBlue,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          backgroundColor: AppColors.bgDark.withValues(alpha: 0.9),
-                          behavior: SnackBarBehavior.floating,
-                          duration: const Duration(seconds: 4),
-                        ),
-                      );
-                    }
-                  });
-                }
+
               },
               child: BlocBuilder<FeedBloc, FeedState>(
                 builder: (context, state) {
                   // Handle initial loading state
                   if (state.status == FeedStatus.loading && state.posts.isEmpty) {
                     return Scaffold(
-                      backgroundColor: AppColors.bgDark,
+                      backgroundColor: Theme.of(context).colorScheme.surface,
                       body: const SafeArea(
                         child: Center(
-                          child: CupertinoActivityIndicator(radius: 20),
+                          child: CircularProgressIndicator(strokeWidth: 3),
                         ),
                       ),
                     );
@@ -227,28 +182,28 @@ class _FeedScreenState extends State<FeedScreen> with AutomaticKeepAliveClientMi
                   // Handle initial error state
                   if (state.status == FeedStatus.failure && state.posts.isEmpty) {
                     return Scaffold(
-                      backgroundColor: AppColors.bgDark,
+                      backgroundColor: Theme.of(context).colorScheme.surface,
                       body: SafeArea(
                         child: Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               const Icon(
-                                CupertinoIcons.wifi_slash,
+                                Icons.wifi_off,
                                 size: 64,
-                                color: CupertinoColors.systemGrey,
+                                color: Colors.grey,
                               ),
                               const SizedBox(height: 16),
                               Text(
                                 state.error ?? 'Не удалось загрузить ленту',
                                 style: const TextStyle(
-                                  color: CupertinoColors.systemGrey,
+                                  color: Colors.grey,
                                   fontSize: 16,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 16),
-                              CupertinoButton.filled(
+                              FilledButton(
                                 onPressed: () {
                                   context.read<FeedBloc>().add(InitFeedEvent());
                                 },
@@ -263,78 +218,91 @@ class _FeedScreenState extends State<FeedScreen> with AutomaticKeepAliveClientMi
 
                   return SizedBox.expand(
                     child: Scaffold(
-                      backgroundColor: AppColors.bgDark,
+                      backgroundColor: Colors.transparent,
                       body: SafeArea(
-                        child: Column(
-                          children: [
-                            const OnlineUsersBar(),
-                            // Thin loading bar with shimmer animation under online users bar
-                            if (state.isRefreshing && state.posts.isNotEmpty)
-                              _LoadingBar(color: context.dynamicPrimaryColor),
-                            Expanded(
-                              child: RefreshIndicator(
-                                onRefresh: () async {
-                                  context.read<FeedBloc>().add(RefreshFeedEvent());
-                                },
-                                color: context.dynamicPrimaryColor,
-                                child: CustomScrollView(
-                                  controller: _scrollController,
-                                  cacheExtent: 800,
-                                  slivers: [
-                                    SliverList(
-                                      delegate: SliverChildBuilderDelegate(
-                                        (context, index) {
-                                          if (index >= state.posts.length) {
-                                            if (state.paginationStatus == PaginationStatus.loading) {
-                                              return const PostShimmer();
-                                            } else if (state.paginationStatus == PaginationStatus.failed) {
-                                              return Padding(
-                                                padding: const EdgeInsets.all(16),
-                                                child: Center(
-                                                  child: Column(
-                                                    children: [
-                                                      const Text(
-                                                        'Не удалось загрузить больше постов',
-                                                        style: TextStyle(
-                                                          color: CupertinoColors.systemGrey,
-                                                          fontSize: 14,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 8),
-                                                      CupertinoButton(
-                                                        onPressed: () {
-                                                          context.read<FeedBloc>().add(FetchPostsEvent());
-                                                        },
-                                                        child: const Text('Повторить'),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              );
-                                            } else {
-                                              return const SizedBox();
-                                            }
-                                          }
-                                          final post = state.posts[index];
-                                          return PostCardNew(
-                                            postId: post.id,
-                                            key: ValueKey(post.id),
-                                          );
-                                        },
-                                        childCount: state.posts.length + (state.paginationStatus == PaginationStatus.loading ? 1 : 0),
-                                        addAutomaticKeepAlives: false,
-                                        addRepaintBoundaries: true,
-                                        addSemanticIndexes: false,
-                                      ),
-                                    ),
-                                    const SliverToBoxAdapter(
-                                      child: SizedBox(height: 80),
-                                    ),
+                        child: CustomRefreshIndicator(
+                          onRefresh: () async {
+                            context.read<FeedBloc>().add(RefreshFeedEvent());
+                          },
+                          color: context.dynamicPrimaryColor,
+                          child: CustomScrollView(
+                            controller: _scrollController,
+                            cacheExtent: 800,
+                            slivers: [
+                              // Отступ сверху под хедер
+                              const SliverToBoxAdapter(
+                                child: SizedBox(height: 52),
+                              ),
+                              // Online users bar as first sliver item
+                              SliverToBoxAdapter(
+                                child: Column(
+                                  children: [
+                                    const OnlineUsersBar(),
+                                    // Thin loading bar with shimmer animation under online users bar
+                                    if (state.isRefreshing && state.posts.isNotEmpty)
+                                      _LoadingBar(color: context.dynamicPrimaryColor),
                                   ],
                                 ),
                               ),
-                            ),
-                          ],
+                              SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    if (index >= state.posts.length) {
+                                      if (state.paginationStatus == PaginationStatus.loading) {
+                                        return const ProgressiveLoadingIndicator(
+                                          message: 'Загрузка...',
+                                        );
+                                      } else if (state.paginationStatus == PaginationStatus.failed) {
+                                        return Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: Center(
+                                            child: Column(
+                                              children: [
+                                                const Text(
+                                                  'Не удалось загрузить больше постов',
+                                                  style: TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                TextButton(
+                                                  onPressed: () {
+                                                    context.read<FeedBloc>().add(FetchPostsEvent());
+                                                  },
+                                                  child: const Text('Повторить'),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      } else {
+                                        return const SizedBox();
+                                      }
+                                    }
+                                    final post = state.posts[index];
+                                    return StaggeredListItem(
+                                      index: index,
+                                      child: PostCardNew(
+                                        postId: post.id,
+                                        key: ValueKey(post.id),
+                                        transparentBackground: true,
+                                        heroTagPrefix: 'feed_post_media', // Уникальный префикс для постов в ленте
+                                        feedIndex: index, // Индекс поста в ленте для уникальности Hero тегов
+                                      ),
+                                    );
+                                  },
+                                  childCount: state.posts.length + (state.paginationStatus == PaginationStatus.loading ? 1 : 0),
+                                  addAutomaticKeepAlives: false,
+                                  addRepaintBoundaries: true,
+                                  addSemanticIndexes: false,
+                                ),
+                              ),
+                              const SliverToBoxAdapter(
+                                child: SizedBox(height: 80),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -345,11 +313,11 @@ class _FeedScreenState extends State<FeedScreen> with AutomaticKeepAliveClientMi
           }
 
           // Default loading state
-          return CupertinoPageScaffold(
-            backgroundColor: AppColors.bgDark,
-            child: const SafeArea(
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            body: const SafeArea(
               child: Center(
-                child: CupertinoActivityIndicator(radius: 20),
+                child: CircularProgressIndicator(strokeWidth: 3),
               ),
             ),
           );

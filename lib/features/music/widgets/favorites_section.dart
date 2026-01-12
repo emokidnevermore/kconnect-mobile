@@ -5,14 +5,12 @@
 /// Включает состояния загрузки, ошибки и пустого списка.
 library;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../theme/app_colors.dart';
 import '../../../core/utils/theme_extensions.dart';
 import '../../../theme/app_text_styles.dart';
+import '../../../services/cache/audio_preload_service.dart';
 import '../domain/models/track.dart';
-import '../presentation/blocs/playback_bloc.dart';
 import '../presentation/blocs/queue_bloc.dart';
 import '../presentation/blocs/queue_event.dart';
 import '../presentation/blocs/music_bloc.dart';
@@ -31,6 +29,8 @@ class FavoritesSection extends StatefulWidget {
 
 class _FavoritesSectionState extends State<FavoritesSection> {
   final ScrollController _scrollController = ScrollController();
+  final AudioPreloadService _preloadService = AudioPreloadService.instance;
+  int _lastPreloadedEndIndex = -1;
 
   /// Инициализация виджета
   @override
@@ -44,6 +44,9 @@ class _FavoritesSectionState extends State<FavoritesSection> {
         final musicBloc = context.read<MusicBloc>();
         if (musicBloc.state.favorites.isEmpty && musicBloc.state.favoritesStatus == MusicLoadStatus.initial) {
           musicBloc.add(MusicFavoritesFetched());
+        } else {
+          // Предзагружаем первые видимые треки
+          _preloadVisibleTracks();
         }
       }
     });
@@ -58,11 +61,43 @@ class _FavoritesSectionState extends State<FavoritesSection> {
 
   /// Обработчик прокрутки для бесконечной загрузки
   void _onScroll() {
+    // Предзагрузка видимых треков
+    _preloadVisibleTracks();
+
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
       final musicBloc = context.read<MusicBloc>();
       if (musicBloc.state.favoritesHasNextPage && musicBloc.state.favoritesStatus != MusicLoadStatus.loading) {
         musicBloc.add(MusicFavoritesLoadMore());
       }
+    }
+  }
+
+  /// Предзагружает видимые треки
+  void _preloadVisibleTracks() {
+    final musicBloc = context.read<MusicBloc>();
+    final state = musicBloc.state;
+    
+    if (state.favorites.isEmpty) return;
+
+    // Вычисляем видимые индексы на основе позиции прокрутки
+    const itemHeight = 80.0;
+    final scrollOffset = _scrollController.position.pixels;
+    final viewportHeight = _scrollController.position.viewportDimension;
+    
+    final startIndex = (scrollOffset / itemHeight).floor();
+    final endIndex = ((scrollOffset + viewportHeight) / itemHeight).ceil() + 3;
+    
+    final clampedStart = startIndex.clamp(0, state.favorites.length);
+    final clampedEnd = endIndex.clamp(0, state.favorites.length);
+    
+    // Предзагружаем только если диапазон изменился
+    if (clampedEnd > _lastPreloadedEndIndex) {
+      _preloadService.preloadVisibleTracks(
+        state.favorites,
+        clampedStart,
+        clampedEnd,
+      );
+      _lastPreloadedEndIndex = clampedEnd;
     }
   }
 
@@ -80,7 +115,7 @@ class _FavoritesSectionState extends State<FavoritesSection> {
   Widget _buildContent(MusicState state) {
     if (state.favoritesStatus == MusicLoadStatus.loading && state.favorites.isEmpty) {
       return const Center(
-        child: CupertinoActivityIndicator(),
+        child: CircularProgressIndicator(),
       );
     }
 
@@ -89,24 +124,24 @@ class _FavoritesSectionState extends State<FavoritesSection> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              CupertinoIcons.exclamationmark_triangle,
+            Icon(
+              Icons.warning,
               size: 48,
-              color: AppColors.textSecondary,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
             Text(
               'Ошибка загрузки',
-              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary),
+              style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurface),
             ),
             const SizedBox(height: 8),
-            CupertinoButton(
+            TextButton(
               onPressed: () {
                 context.read<MusicBloc>().add(MusicFavoritesFetched());
               },
               child: Text(
                 'Повторить',
-                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primaryPurple),
+                style: AppTextStyles.bodyMedium.copyWith(color: context.dynamicPrimaryColor),
               ),
             ),
           ],
@@ -119,15 +154,15 @@ class _FavoritesSectionState extends State<FavoritesSection> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              CupertinoIcons.heart,
+            Icon(
+              Icons.favorite_border,
               size: 48,
-              color: AppColors.textSecondary,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
             Text(
               'У вас пока нет любимых треков',
-              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary),
+              style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurface),
               textAlign: TextAlign.center,
             ),
           ],
@@ -143,6 +178,10 @@ class _FavoritesSectionState extends State<FavoritesSection> {
       child: CustomScrollView(
         controller: _scrollController,
         slivers: [
+          // Отступ сверху под хедер
+          const SliverToBoxAdapter(
+            child: SizedBox(height: 52),
+          ),
           SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -151,7 +190,7 @@ class _FavoritesSectionState extends State<FavoritesSection> {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 16),
                     child: Center(
-                      child: CupertinoActivityIndicator(),
+                      child: CircularProgressIndicator(),
                     ),
                   );
                 }
@@ -178,16 +217,16 @@ class _FavoritesSectionState extends State<FavoritesSection> {
   /// Обработчик воспроизведения трека
   ///
   /// Создает очередь с избранными треками и начинает воспроизведение выбранного трека
+  /// Воспроизведение запускается автоматически через MediaPlayerService
   void _onTrackPlay(Track track, List<Track> allTracks) {
     try {
       // Создание очереди с избранными треками
+      // Воспроизведение запустится автоматически через MediaPlayerService
+      // когда очередь синхронизируется с audio_service
       final trackIndex = allTracks.indexWhere((t) => t.id == track.id);
       if (trackIndex != -1) {
         context.read<QueueBloc>().add(QueuePlayTracksRequested(allTracks, 'favorites', startIndex: trackIndex));
       }
-
-      // Воспроизведение трека
-      context.read<PlaybackBloc>().add(PlaybackPlayRequested(track));
     } catch (e) {
       // Обработка ошибки без показа пользователю
     }

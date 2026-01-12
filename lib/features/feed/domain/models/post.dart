@@ -1,5 +1,6 @@
 
 import 'comment.dart';
+import 'poll.dart';
 import '../../../music/domain/models/track.dart';
 
 /// Модель данных поста в социальной сети
@@ -32,6 +33,7 @@ class Post {
   final String? type;
   final Post? originalPost;
   final bool isPinned;
+  final Poll? poll;
 
   Post({
     required this.id,
@@ -59,6 +61,7 @@ class Post {
     this.type,
     this.originalPost,
     this.isPinned = false,
+    this.poll,
   });
 
   static int _parseTimestamp(dynamic timestamp) {
@@ -100,6 +103,11 @@ class Post {
       music = (json['music'] as List).map((trackJson) => Track.fromJson(trackJson)).toList();
     }
 
+    Poll? poll;
+    if (json['poll'] != null) {
+      poll = Poll.fromJson(json['poll'] as Map<String, dynamic>);
+    }
+
     return Post(
       id: json['id'] ?? 0,
       content: json['content'] ?? '',
@@ -126,6 +134,7 @@ class Post {
       type: json['type'] as String?,
       originalPost: originalPost,
       isPinned: json['is_pinned'] ?? false,
+      poll: poll,
     );
   }
 
@@ -156,6 +165,7 @@ class Post {
       'type': type,
       'original_post': originalPost?.toJson(),
       'is_pinned': isPinned,
+      'poll': poll?.toJson(),
     };
   }
 
@@ -185,6 +195,7 @@ class Post {
     String? type,
     Post? originalPost,
     bool? isPinned,
+    Poll? poll,
   }) {
     return Post(
       id: id ?? this.id,
@@ -212,6 +223,7 @@ class Post {
       type: type ?? this.type,
       originalPost: originalPost ?? this.originalPost,
       isPinned: isPinned ?? this.isPinned,
+      poll: poll ?? this.poll,
     );
   }
 }

@@ -4,6 +4,7 @@ import '../../../auth/presentation/blocs/auth_bloc.dart';
 import '../../../auth/presentation/blocs/auth_state.dart';
 import '../../domain/usecases/fetch_posts_usecase.dart';
 import '../../domain/models/online_user.dart';
+import '../../domain/models/post.dart';
 import 'feed_event.dart';
 import 'feed_state.dart';
 
@@ -22,6 +23,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
   final AddCommentUseCase _addCommentUseCase;
   final DeleteCommentUseCase _deleteCommentUseCase;
   final LikeCommentUseCase _likeCommentUseCase;
+  final VotePollUseCase _votePollUseCase;
 
   /// BLoC аутентификации для отслеживания изменений пользователя
   final AuthBloc _authBloc;
@@ -35,6 +37,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
     this._addCommentUseCase,
     this._deleteCommentUseCase,
     this._likeCommentUseCase,
+    this._votePollUseCase,
     this._authBloc,
   ) : super(const FeedState()) {
     // Подписка на изменения состояния аутентификации для перезагрузки ленты
@@ -50,6 +53,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
     on<AddCommentEvent>(_onAddComment);
     on<DeleteCommentEvent>(_onDeleteComment);
     on<LikeCommentEvent>(_onLikeComment);
+    on<VotePollEvent>(_onVotePoll);
   }
 
   /// Обработчик изменений состояния аутентификации
@@ -140,7 +144,11 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         return;
       }
 
-      final allPosts = [...state.posts, ...newPosts];
+      // Фильтруем дубликаты: исключаем посты, которые уже есть в списке
+      final existingPostIds = state.posts.map((post) => post.id).toSet();
+      final uniqueNewPosts = newPosts.where((post) => !existingPostIds.contains(post.id)).toList();
+
+      final allPosts = [...state.posts, ...uniqueNewPosts];
       final nextPage = state.page + 1;
 
       emit(state.copyWith(
@@ -391,6 +399,67 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
       emit(state.copyWith(
         processingCommentLikes: state.processingCommentLikes.where((id) => id != event.commentId).toSet(),
       ));
+    }
+  }
+
+  Future<void> _onVotePoll(
+    VotePollEvent event,
+    Emitter<FeedState> emit,
+  ) async {
+    final postIndex = state.posts.indexWhere((post) => post.id == event.postId);
+    if (postIndex == -1) return;
+
+    final post = state.posts[postIndex];
+    
+    // Проверяем, есть ли опрос в посте или в оригинальном посте (для репостов)
+    final poll = post.poll ?? post.originalPost?.poll;
+    if (poll == null || poll.id != event.pollId) return;
+
+    try {
+      // Оптимистичное обновление
+      // Если пользователь уже проголосовал и меняет голос, обновляем существующий
+      final optimisticPoll = poll.copyWith(
+        userVoted: event.optionIds.isNotEmpty,
+        userVoteOptionIds: event.optionIds,
+      );
+      
+      Post updatedPost;
+      if (post.poll != null) {
+        // Обычный пост с опросом
+        updatedPost = post.copyWith(poll: optimisticPoll);
+      } else if (post.originalPost != null && post.originalPost!.poll != null) {
+        // Репост с опросом в оригинальном посте
+        updatedPost = post.copyWith(
+          originalPost: post.originalPost!.copyWith(poll: optimisticPoll),
+        );
+      } else {
+        return;
+      }
+
+      final optimisticPosts = state.posts.map((p) => p.id == event.postId ? updatedPost : p).toList();
+      emit(state.copyWith(posts: optimisticPosts));
+
+      // Получаем обновленные данные с сервера
+      final serverPoll = await _votePollUseCase(event.pollId, event.optionIds, isMultipleChoice: event.isMultipleChoice, hasExistingVotes: event.hasExistingVotes);
+
+      // Обновляем пост с данными с сервера
+      Post finalPost;
+      if (post.poll != null) {
+        finalPost = post.copyWith(poll: serverPoll);
+      } else if (post.originalPost != null) {
+        finalPost = post.copyWith(
+          originalPost: post.originalPost!.copyWith(poll: serverPoll),
+        );
+      } else {
+        return;
+      }
+
+      final finalPosts = state.posts.map((p) => p.id == event.postId ? finalPost : p).toList();
+      emit(state.copyWith(posts: finalPosts));
+    } catch (e) {
+      // В случае ошибки возвращаем исходное состояние
+      final revertedPosts = state.posts.map((p) => p.id == event.postId ? post : p).toList();
+      emit(state.copyWith(posts: revertedPosts));
     }
   }
 }

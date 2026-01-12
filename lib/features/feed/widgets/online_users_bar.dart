@@ -5,13 +5,14 @@
 /// Ограничивает количество отображаемых пользователей и показывает счетчик.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants.dart';
 import '../../../core/widgets/authorized_cached_network_image.dart';
-import '../../../theme/app_colors.dart';
 import '../../../core/utils/theme_extensions.dart';
 import '../../../features/profile/utils/profile_navigation_utils.dart';
+import '../../../services/storage_service.dart';
+import '../components/post_constants.dart';
 import '../presentation/blocs/feed_bloc.dart' as bloc;
 import '../presentation/blocs/feed_state.dart' as state;
 
@@ -28,9 +29,20 @@ class OnlineUsersBar extends StatelessWidget {
       builder: (context, feedState) {
         if (feedState.onlineUsers.isEmpty) return const SizedBox(height: 60);
 
-        return Container(
-          height: 60,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        return ValueListenableBuilder<String?>(
+          valueListenable: StorageService.appBackgroundPathNotifier,
+          builder: (context, backgroundPath, child) {
+            final hasBackground = backgroundPath != null && backgroundPath.isNotEmpty;
+            final containerColor = hasBackground ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.7) : Theme.of(context).colorScheme.surfaceContainerLow;
+            
+            return Container(
+              height: 60,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: PostConstants.cardVerticalPadding),
+              decoration: BoxDecoration(
+                color: containerColor,
+                borderRadius: BorderRadius.circular(PostConstants.cardBorderRadius),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
             children: [
               // Аватарки слева
@@ -46,14 +58,14 @@ class OnlineUsersBar extends StatelessWidget {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: AppColors.bgCard,
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
                             shape: BoxShape.circle,
                           ),
                           child: Center(
                             child: Text(
                               '+${feedState.onlineUsers.length - 20}',
-                              style: const TextStyle(
-                                color: CupertinoColors.systemGrey,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -75,18 +87,18 @@ class OnlineUsersBar extends StatelessWidget {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: AppColors.bgCard,
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
                             shape: BoxShape.circle,
                           ),
                           child: ClipOval(
                             child: AuthorizedCachedNetworkImage(
                               imageUrl: user.avatar.isNotEmpty ? user.avatar : AppConstants.userAvatarPlaceholder,
                               fit: BoxFit.cover,
-                              placeholder: (context, url) => const CupertinoActivityIndicator(radius: 8),
-                              errorWidget: (context, url, error) => const Icon(
-                                CupertinoIcons.person,
+                              placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                              errorWidget: (context, url, error) => Icon(
+                                Icons.person,
                                 size: 16,
-                                color: CupertinoColors.systemGrey,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -107,8 +119,8 @@ class OnlineUsersBar extends StatelessWidget {
                 child: Center(
                   child: Text(
                     '${feedState.onlineUsers.length}',
-                    style: const TextStyle(
-                      color: AppColors.bgWhite,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onPrimary,
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                     ),
@@ -116,7 +128,9 @@ class OnlineUsersBar extends StatelessWidget {
                 ),
               ),
             ],
-          ),
+              ),
+            );
+          },
         );
       },
     );

@@ -4,9 +4,9 @@
 /// Поддерживает индикацию количества комментариев и обработку нажатий.
 library;
 
-import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../theme/app_colors.dart';
+import 'package:flutter/material.dart';
+import '../../../core/utils/theme_extensions.dart';
 import '../../../theme/app_text_styles.dart';
 
 /// Компонент превью комментариев поста
@@ -40,7 +40,7 @@ class PostCommentsPreview extends StatelessWidget {
                   height: 20,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.bgCard,
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   ),
                   child: ClipOval(
                     child: _getCommentAvatar().isNotEmpty
@@ -49,17 +49,17 @@ class PostCommentsPreview extends StatelessWidget {
                             fit: BoxFit.cover,
                             memCacheWidth: 50,
                             memCacheHeight: 50,
-                            placeholder: (context, url) => const CupertinoActivityIndicator(radius: 6),
+                            placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
                             errorWidget: (context, url, error) => const Icon(
-                              CupertinoIcons.person,
+                              Icons.person,
                               size: 12,
-                              color: CupertinoColors.systemGrey,
+                              color: Colors.grey,
                             ),
                           )
                         : const Icon(
-                            CupertinoIcons.person,
+                            Icons.person,
                             size: 12,
-                            color: CupertinoColors.systemGrey,
+                            color: Colors.grey,
                           ),
                   ),
                 ),
@@ -79,13 +79,13 @@ class PostCommentsPreview extends StatelessWidget {
                     margin: const EdgeInsets.only(left: 6),
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryPurple.withValues(alpha:0.2),
+                      color: context.dynamicPrimaryColor.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       '$totalComments',
                       style: AppTextStyles.postStats.copyWith(
-                        color: AppColors.primaryPurple,
+                        color: context.dynamicPrimaryColor,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),

@@ -1,198 +1,150 @@
 library;
 
-import 'dart:async';
-import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import 'package:audio_service/audio_service.dart';
 import '../../domain/repositories/audio_repository.dart';
-import '../../domain/models/playback_state.dart';
 import '../../domain/models/track.dart';
-import 'package:just_audio/just_audio.dart';
+import '../../../../services/audio_service_manager.dart';
+import '../../../../services/kconnect_audio_handler.dart';
+import '../../../../services/cache/audio_cache_service.dart';
 
+/// Реализация AudioRepository - простой прокси для команд
 class AudioRepositoryImpl implements AudioRepository {
-  final AudioPlayer _audioPlayer;
-  final StreamController<PlaybackState> _playbackStateController;
-  PlaybackState _currentState;
-  static const MethodChannel _channel = MethodChannel('com.example.kconnectMobile/audio');
-
-  AudioRepositoryImpl()
-      : _audioPlayer = AudioPlayer(),
-        _playbackStateController = StreamController<PlaybackState>.broadcast(),
-        _currentState = const PlaybackState() {
-    _setupAudioPlayer();
-    _setupMethodChannel();
-  }
-  
-  void _setupMethodChannel() {
-    _channel.setMethodCallHandler((call) async {
-      switch (call.method) {
-        case 'resume':
-          await resume();
-          break;
-        case 'pause':
-          await pause();
-          break;
-        case 'toggle':
-          if (_audioPlayer.playing) {
-            await pause();
-          } else {
-            await resume();
-          }
-          break;
-        case 'nextTrack':
-        case 'previousTrack':
-          break;
-        case 'seekForward':
-          final seconds = (call.arguments as num?)?.toDouble() ?? 15.0;
-          final currentPos = _audioPlayer.position;
-          final duration = _audioPlayer.duration ?? Duration.zero;
-          final newPosition = currentPos + Duration(seconds: seconds.toInt());
-          final clampedPosition = newPosition > duration ? duration : newPosition;
-          await seek(clampedPosition);
-          break;
-        case 'seekBackward':
-          final seconds = (call.arguments as num?)?.toDouble() ?? 15.0;
-          final currentPos = _audioPlayer.position;
-          final duration = _audioPlayer.duration ?? Duration.zero;
-          final newPosition = currentPos - Duration(seconds: seconds.toInt());
-          final clampedPosition = newPosition < Duration.zero 
-              ? Duration.zero 
-              : (newPosition > duration ? duration : newPosition);
-          await seek(clampedPosition);
-          break;
-        case 'seekTo':
-          final milliseconds = (call.arguments as num?)?.toInt() ?? 0;
-          final duration = _audioPlayer.duration;
-          final targetPosition = Duration(milliseconds: milliseconds);
-          final clampedPosition = duration != null && targetPosition > duration 
-              ? duration 
-              : (targetPosition < Duration.zero ? Duration.zero : targetPosition);
-          await seek(clampedPosition);
-          break;
-      }
-    });
-  }
-
-  void _setupAudioPlayer() {
-    _audioPlayer.positionStream.listen((position) {
-      _updateState(_currentState.copyWith(position: position));
-      _updateNowPlayingInfo(position: position);
-    });
-
-    _audioPlayer.playerStateStream.listen((playerState) {
-      PlaybackStatus status;
-      bool isBuffering = false;
-
-      switch (playerState.processingState) {
-        case ProcessingState.idle:
-        case ProcessingState.loading:
-          status = PlaybackStatus.stopped;
-          break;
-        case ProcessingState.buffering:
-          status = _audioPlayer.playing ? PlaybackStatus.playing : PlaybackStatus.stopped;
-          isBuffering = true;
-          break;
-        case ProcessingState.ready:
-          status = _audioPlayer.playing ? PlaybackStatus.playing : PlaybackStatus.paused;
-          break;
-        case ProcessingState.completed:
-          status = PlaybackStatus.stopped;
-          _updateState(_currentState.copyWith(position: Duration.zero));
-          _playbackStateController.add(_currentState.copyWith(
-            status: PlaybackStatus.stopped,
-            error: 'COMPLETED',
-          ));
-          break;
-      }
-
-      _updateState(_currentState.copyWith(
-        status: status,
-        isBuffering: isBuffering,
-        duration: _audioPlayer.duration,
-      ));
-      if (status == PlaybackStatus.playing || status == PlaybackStatus.paused) {
-        _updateNowPlayingInfo();
-      }
-    });
-  }
-
-  void _updateState(PlaybackState newState) {
-    _currentState = newState;
-    _playbackStateController.add(newState);
-  }
-
-  @override
-  Stream<PlaybackState> get playbackState => _playbackStateController.stream;
-
-  @override
-  PlaybackState get currentState => _currentState;
+  AudioRepositoryImpl();
 
   @override
   Future<void> playTrack(Track track) async {
-    try {
-      await _audioPlayer.setUrl(_ensureFullUrl(track.filePath));
-      _updateState(_currentState.copyWith(currentTrack: track));
-      await _audioPlayer.play();
-      _updateNowPlayingInfo(track: track);
-    } catch (e) {
-      _updateState(PlaybackState.error(track, e.toString()));
-    }
-  }
-  
-  void _updateNowPlayingInfo({Track? track, Duration? position}) {
-    final currentTrack = track ?? _currentState.currentTrack;
-    if (currentTrack == null) return;
+    await AudioServiceManager.ensureServiceReady();
     
-    final currentPosition = position ?? _audioPlayer.position;
-    final duration = _audioPlayer.duration ?? Duration(milliseconds: currentTrack.durationMs);
-    
-    try {
-      _channel.invokeMethod('updateNowPlaying', {
-        'title': currentTrack.title,
-        'artist': currentTrack.artist,
-        'duration': duration.inMilliseconds,
-        'position': currentPosition.inMilliseconds,
-        'isPlaying': _audioPlayer.playing,
-        'artwork': currentTrack.coverPath != null 
-            ? _ensureFullUrl(currentTrack.coverPath!)
-            : null,
-      });
-    } catch (e) {
-      if (kDebugMode) debugPrint('Failed to update now playing info: $e');
+    final handler = AudioServiceManager.getHandler();
+    if (handler == null) {
+      throw Exception('AudioHandler is not available');
     }
+    
+    final fullUrl = _ensureFullUrl(track.filePath);
+    final coverUrl = track.coverPath != null ? _ensureFullUrl(track.coverPath!) : null;
+    
+    // Получаем кэшированный файл аудио
+    final audioCacheService = AudioCacheService.instance;
+    final cachedFile = await audioCacheService.getCachedAudioFile(fullUrl);
+    
+    // Используем путь к кэшированному файлу как ID для MediaItem
+    // Это позволяет audio_service использовать локальный файл
+    final cachedFilePath = cachedFile.path;
+    
+    final mediaItem = MediaItem(
+      id: cachedFilePath, // Используем путь к кэшированному файлу
+      title: track.title,
+      artist: track.artist,
+      duration: Duration(milliseconds: track.durationMs),
+      artUri: coverUrl != null ? Uri.parse(coverUrl) : null,
+      extras: {
+        'trackId': track.id,
+        'coverPath': track.coverPath,
+        'isLiked': track.isLiked,
+        'originalUrl': fullUrl, // Сохраняем оригинальный URL для справки
+      },
+    );
+    
+    // Проверяем, есть ли трек в текущей очереди audio_service
+    final currentQueue = handler.queue.value;
+    if (currentQueue.isNotEmpty) {
+      final trackIndex = currentQueue.indexWhere((item) => item.id == fullUrl);
+      if (trackIndex != -1) {
+        // Трек найден в очереди - переключаемся на него
+        if (kDebugMode) {
+          debugPrint('AudioRepositoryImpl: playTrack - track found in queue at index $trackIndex, using skipToQueueItem');
+        }
+        await handler.skipToQueueItem(trackIndex);
+        return;
+      }
+    }
+    
+    // Трек не в очереди - воспроизводим как одиночный трек
+    // Это fallback для случаев, когда очередь не создана через QueueBloc
+    if (kDebugMode) {
+      debugPrint('AudioRepositoryImpl: playTrack - track not in queue, using playMediaItem');
+    }
+    await handler.playMediaItem(mediaItem);
   }
 
   @override
   Future<void> pause() async {
-    await _audioPlayer.pause();
+    final handler = AudioServiceManager.getHandler();
+    if (handler != null) {
+      await handler.pause();
+    }
   }
 
   @override
   Future<void> resume() async {
-    await _audioPlayer.play();
+    final handler = AudioServiceManager.getHandler();
+    if (handler != null) {
+      await handler.play();
+    }
   }
 
   @override
   Future<void> stop() async {
-    await _audioPlayer.stop();
-    _updateState(const PlaybackState());
+    final handler = AudioServiceManager.getHandler();
+    if (handler != null) {
+      await handler.stop();
+    }
   }
 
   @override
   Future<void> seek(Duration position) async {
-    await _audioPlayer.seek(position);
+    final handler = AudioServiceManager.getHandler();
+    if (handler != null) {
+      await handler.seek(position);
+    } else {
+      throw Exception('AudioHandler is not available - cannot seek');
+    }
   }
 
-  @override
-  bool get isPlaying => _audioPlayer.playing;
+  void updateCommandAvailability({
+    required bool canSkipNext,
+    required bool canSkipPrevious,
+  }) {
+    final handler = AudioServiceManager.getHandler();
+    if (kDebugMode) {
+      debugPrint('AudioRepositoryImpl: updateCommandAvailability called with canSkipNext=$canSkipNext, canSkipPrevious=$canSkipPrevious');
+      debugPrint('AudioRepositoryImpl: handler is ${handler?.runtimeType}, is KConnectAudioHandler: ${handler is KConnectAudioHandler}');
+    }
+    if (handler is KConnectAudioHandler) {
+      handler.updateCommandAvailability(
+        canSkipNext: canSkipNext,
+        canSkipPrevious: canSkipPrevious,
+      );
+    }
+  }
 
-  @override
-  bool get isBuffering => _currentState.isBuffering;
+  void updateLikeState(bool isLiked) {
+    final handler = AudioServiceManager.getHandler();
+    if (handler is KConnectAudioHandler) {
+      handler.updateLikeState(isLiked);
+    }
+  }
 
-  @override
-  Duration get position => _audioPlayer.position;
-
-  @override
-  Duration? get duration => _audioPlayer.duration;
+  void setOnSkipCallback(void Function(bool isNext) callback) {
+    if (kDebugMode) {
+      debugPrint('AudioRepositoryImpl: setOnSkipCallback called');
+    }
+    final handler = AudioServiceManager.getHandler();
+    if (kDebugMode) {
+      debugPrint('AudioRepositoryImpl: setOnSkipCallback - handler is ${handler?.runtimeType}, is KConnectAudioHandler: ${handler is KConnectAudioHandler}');
+    }
+    if (handler is KConnectAudioHandler) {
+      handler.setOnSkipCallback(callback);
+      if (kDebugMode) {
+        debugPrint('AudioRepositoryImpl: setOnSkipCallback - callback set successfully');
+      }
+    } else {
+      if (kDebugMode) {
+        debugPrint('AudioRepositoryImpl: setOnSkipCallback - handler is not KConnectAudioHandler, cannot set callback');
+      }
+    }
+  }
 
   String _ensureFullUrl(String url) {
     if (url.startsWith('http')) return url;
@@ -200,8 +152,5 @@ class AudioRepositoryImpl implements AudioRepository {
   }
 
   @override
-  void dispose() {
-    _audioPlayer.dispose();
-    _playbackStateController.close();
-  }
+  void dispose() {}
 }

@@ -4,9 +4,9 @@
 /// Поддерживает автоматический вход после успешной регистрации и подтверждения email.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:kconnect_mobile/theme/app_colors.dart';
+import 'package:kconnect_mobile/core/utils/theme_extensions.dart';
 import 'package:kconnect_mobile/theme/app_gradients.dart';
 import 'package:kconnect_mobile/theme/app_text_styles.dart';
 import 'package:kconnect_mobile/routes/route_names.dart';
@@ -63,15 +63,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showError(String message) {
-    showCupertinoDialog(
+    showDialog(
       context: context,
-      builder: (_) => CupertinoAlertDialog(
+      builder: (_) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('Ошибка'),
         content: Text(message),
         actions: [
-          CupertinoDialogAction(
-            child: const Text('ОК'),
+          TextButton(
             onPressed: () => Navigator.of(context).pop(),
+            child: const Text('ОК'),
           )
         ],
       ),
@@ -79,20 +80,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showSuccessDialog() {
-    showCupertinoDialog(
+    showDialog(
       context: context,
-      builder: (_) => CupertinoAlertDialog(
+      builder: (_) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('Регистрация успешна!'),
         content: const Text(
           'Проверьте почту для подтверждения email (возможно письмо в спаме) и нажмите "Продолжить" для входа в систему.'
         ),
         actions: [
-          CupertinoDialogAction(
-            child: const Text('Продолжить'),
+          TextButton(
             onPressed: () {
               Navigator.of(context).pop(); // Close dialog
               context.read<AuthBloc>().add(AutoLoginEvent(_savedEmail, _savedPassword));
             },
+            child: const Text('Продолжить'),
           )
         ],
       ),
@@ -112,12 +114,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
         }
       },
       builder: (context, state) {
-        return CupertinoPageScaffold(
-          backgroundColor: AppColors.bgDark,
-          child: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
+        return GestureDetector(
+          onTap: () {
+            FocusScope.of(context).unfocus();
+          },
+          behavior: HitTestBehavior.opaque,
+          child: Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            body: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(minHeight: constraints.maxHeight),
@@ -130,14 +137,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           children: [
                             ShaderMask(
                               shaderCallback: (bounds) =>
-                                  AppGradients.primary.createShader(bounds),
+                                  AppGradients.primary(context).createShader(bounds),
                               child: const Text(
                                 'Регистрация',
                                 style: TextStyle(
                                   fontSize: 32,
                                   fontFamily: 'Mplus',
                                   fontWeight: FontWeight.bold,
-                                  color: CupertinoColors.white,
+                                  color: Colors.white,
                                 ),
                               ),
                             ),
@@ -175,7 +182,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               child: Text(
                                 'Уже есть аккаунт? Войти',
                                 style: AppTextStyles.bodyMedium.copyWith(
-                                  color: AppColors.primaryPurple,
+                                  color: context.dynamicPrimaryColor,
                                 ),
                               ),
                             ),
@@ -188,6 +195,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               },
             ),
           ),
+          ),
         );
       },
     );
@@ -199,29 +207,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
     String? Function(String?)? validator,
     bool obscure = false,
   }) {
-    return CupertinoTextField(
+    return TextField(
       controller: controller,
-      placeholder: placeholder,
       obscureText: obscure,
       style: AppTextStyles.bodyMedium,
-      placeholderStyle: AppTextStyles.bodyMedium.copyWith(
-        color: CupertinoColors.systemGrey,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(12),
+      decoration: InputDecoration(
+        hintText: placeholder,
       ),
     );
   }
 
   Widget _buildRegisterButton(AuthState state) {
     return state is AuthLoading
-        ? const CupertinoActivityIndicator()
-        : CupertinoButton.filled(
-            borderRadius: BorderRadius.circular(12),
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+        ? const CircularProgressIndicator()
+        : FilledButton(
             onPressed: _doRegister,
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
             child: Text('Создать аккаунт', style: AppTextStyles.button),
           );
   }

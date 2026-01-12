@@ -5,8 +5,7 @@
 /// Поддерживает состояние загрузки и персонализированные цвета.
 library;
 
-import 'package:flutter/cupertino.dart';
-import '../../../theme/app_colors.dart';
+import 'package:flutter/material.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../core/utils/theme_extensions.dart';
 
@@ -25,9 +24,9 @@ class VibeButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        onPressed: isLoading ? null : onGenerateVibe,
+      child: InkWell(
+        onTap: isLoading ? null : onGenerateVibe,
+        borderRadius: BorderRadius.circular(16),
         child: Container(
           height: 120,
           decoration: BoxDecoration(
@@ -39,12 +38,12 @@ class VibeButton extends StatelessWidget {
           child: Row(
             children: [
               // Icon section
-              const Padding(
-                padding: EdgeInsets.only(left: 24, right: 16),
+              Padding(
+                padding: const EdgeInsets.only(left: 24, right: 16),
                 child: Icon(
-                  CupertinoIcons.wand_stars,
+                  Icons.auto_awesome,
                   size: 48,
-                  color: AppColors.bgWhite,
+                  color: Theme.of(context).colorScheme.onPrimary,
                 ),
               ),
               // Text section
@@ -56,13 +55,13 @@ class VibeButton extends StatelessWidget {
                     Text(
                       'Мой вайб',
                       style: AppTextStyles.h2.copyWith(
-                        color: AppColors.bgWhite,
+                        color: Theme.of(context).colorScheme.onPrimary,
                       ),
                     ),
                     Text(
                       'Сервис сам подберёт треки для тебя',
                       style: AppTextStyles.body.copyWith(
-                        color: AppColors.bgWhite.withValues(alpha: 0.9),
+                        color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.9),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -74,13 +73,14 @@ class VibeButton extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: isLoading
-                    ? const CupertinoActivityIndicator(
-                        color: AppColors.bgWhite,
+                    ? CircularProgressIndicator(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        strokeWidth: 2,
                       )
-                    : const Icon(
-                        CupertinoIcons.chevron_right,
+                    : Icon(
+                        Icons.chevron_right,
                         size: 24,
-                        color: AppColors.bgWhite,
+                        color: Theme.of(context).colorScheme.onPrimary,
                       ),
               ),
             ],

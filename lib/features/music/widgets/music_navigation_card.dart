@@ -5,9 +5,9 @@
 /// Поддерживают разные цвета и иконки для визуального различения.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../../../core/utils/theme_extensions.dart';
-import '../../../theme/app_colors.dart';
+import '../../../services/storage_service.dart';
 
 /// Карточка навигации для музыкальных разделов
 ///
@@ -29,51 +29,51 @@ class MusicNavigationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accentColor = color ?? context.dynamicPrimaryColor;
+final accentColor = color ?? context.dynamicPrimaryColor;
 
     return Expanded(
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        onPressed: onPressed,
-        child: Container(
-          height: 60,
-          decoration: BoxDecoration(
-            color: AppColors.bgCard,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: accentColor.withValues(alpha: 0.3),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              if (icon != null) ...[
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Icon(
+      child: ValueListenableBuilder<String?>(
+        valueListenable: StorageService.appBackgroundPathNotifier,
+        builder: (context, backgroundPath, child) {
+          final hasBackground = backgroundPath != null && backgroundPath.isNotEmpty;
+          final cardColor = hasBackground 
+              ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.7)
+              : Theme.of(context).colorScheme.surfaceContainerLow;
+          
+          return Card(
+            margin: EdgeInsets.zero,
+            color: cardColor,
+            child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            height: 60,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (icon != null) ...[
+                  Icon(
                     icon,
                     size: 24,
                     color: accentColor,
                   ),
-                ),
-              ],
-              Expanded(
-                child: Padding(
-                  padding: icon != null ? EdgeInsets.zero : const EdgeInsets.all(8),
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
+          );
+        },
       ),
     );
   }
@@ -93,7 +93,7 @@ class MusicNavigationCardsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Row(
         children: [
           leftCard,

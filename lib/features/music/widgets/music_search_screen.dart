@@ -6,15 +6,15 @@
 library;
 
 import 'dart:async';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../domain/models/track.dart';
 import '../presentation/blocs/music_bloc.dart';
 import '../presentation/blocs/music_event.dart';
 import '../presentation/blocs/music_state.dart';
-import '../presentation/blocs/playback_bloc.dart';
+import '../domain/repositories/audio_repository.dart';
+import '../../../../injection.dart';
 import 'track_list_item.dart';
 
 /// Экран поиска музыки с историей прослушиваний
@@ -75,34 +75,43 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
 
   void _onHistoryTrackTap(Track track) {
     // When tapping on a track from history, just play it
-    context.read<PlaybackBloc>().add(PlaybackPlayRequested(track));
+    final audioRepository = locator<AudioRepository>();
+    audioRepository.playTrack(track).catchError((e) {
+      debugPrint('MusicSearchScreen: Error playing track: $e');
+    });
   }
 
   void _onTrackTap(Track track) {
     // Play the track
-    context.read<PlaybackBloc>().add(PlaybackPlayRequested(track));
+    final audioRepository = locator<AudioRepository>();
+    audioRepository.playTrack(track).catchError((e) {
+      debugPrint('MusicSearchScreen: Error playing track: $e');
+    });
     // Save track to played history
     context.read<MusicBloc>().add(MusicPlayedTrackSaved(track));
   }
 
   void _onClearHistory() {
-    showCupertinoDialog(
+    showDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('Очистить историю'),
         content: const Text('Вы уверены, что хотите очистить историю прослушанных треков?'),
         actions: [
-          CupertinoDialogAction(
-            child: const Text('Отмена'),
+          TextButton(
             onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Отмена'),
           ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('Очистить'),
+          TextButton(
             onPressed: () {
               context.read<MusicBloc>().add(MusicPlayedTracksHistoryCleared());
               Navigator.of(context).pop();
             },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Очистить'),
           ),
         ],
       ),
@@ -111,25 +120,39 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: AppColors.bgDark,
-      child: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                // Search field
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: CupertinoSearchTextField(
-                    controller: _searchController,
-                    placeholder: 'Введите название трека, артиста...',
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    placeholderStyle: const TextStyle(color: AppColors.textSecondary),
-                    backgroundColor: AppColors.bgCard,
-                    borderRadius: BorderRadius.circular(12),
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  // Отступ сверху под хедер
+                  const SizedBox(height: 46),
+                  // Search field
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Введите название трека, артиста...',
+                        hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        prefixIcon: Icon(Icons.search, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                    ),
                   ),
-                ),
 
                 // Content
                 Expanded(
@@ -155,23 +178,27 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
                 left: 16,
                 right: 16,
                 child: Center(
-                  child: CupertinoButton(
-                    padding: EdgeInsets.zero,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     onPressed: _onClearHistory,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                       decoration: BoxDecoration(
-                        color: AppColors.bgCard,
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: AppColors.textSecondary.withValues(alpha: 0.2),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
                           width: 1,
                         ),
                       ),
                       child: Text(
                         'Очистить историю',
                         style: TextStyle(
-                          color: AppColors.textSecondary,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
@@ -183,6 +210,7 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -193,15 +221,15 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              CupertinoIcons.music_note_list,
+              Icons.queue_music,
               size: 64,
-              color: AppColors.textSecondary.withValues(alpha: 0.5),
+              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 8),
             Text(
               'Начните искать музыку',
               style: AppTextStyles.bodySecondary.copyWith(
-                color: AppColors.textSecondary.withValues(alpha: 0.7),
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -231,7 +259,7 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
   Widget _buildSearchResults(MusicState state) {
     if (state.searchStatus == MusicLoadStatus.loading) {
       return const Center(
-        child: CupertinoActivityIndicator(),
+        child: CircularProgressIndicator(),
       );
     }
 
@@ -241,14 +269,14 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              CupertinoIcons.exclamationmark_triangle,
+              Icons.warning,
               size: 64,
-              color: AppColors.error,
+              color: Theme.of(context).colorScheme.error,
             ),
             const SizedBox(height: 16),
             Text(
               'Ошибка поиска',
-              style: AppTextStyles.h3.copyWith(color: AppColors.error),
+              style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.error),
             ),
             const SizedBox(height: 8),
             Text(
@@ -266,14 +294,14 @@ class _MusicSearchScreenState extends State<MusicSearchScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              CupertinoIcons.search,
+              Icons.search,
               size: 64,
-              color: AppColors.textSecondary.withValues(alpha: 0.5),
+              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(
               'Ничего не найдено',
-              style: AppTextStyles.h3.copyWith(color: AppColors.textSecondary),
+              style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 8),
             Text(

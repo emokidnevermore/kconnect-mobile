@@ -5,6 +5,8 @@
 /// Поддерживает различные контексты очередей (favorites, all tracks, vibe)
 library;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../services/cache/audio_preload_service.dart';
+import '../../../../services/audio_service_manager.dart';
 import '../../domain/repositories/music_repository.dart';
 import '../../domain/models/queue_state.dart';
 import '../../domain/models/queue.dart';
@@ -18,6 +20,7 @@ import 'queue_event.dart';
 /// Поддерживает бесконечное воспроизведение для vibe плейлиста.
 class QueueBloc extends Bloc<QueueEvent, QueueState> {
   final MusicRepository _musicRepository;
+  final AudioPreloadService _preloadService = AudioPreloadService.instance;
 
   QueueBloc({required MusicRepository musicRepository})
       : _musicRepository = musicRepository,
@@ -43,12 +46,67 @@ class QueueBloc extends Bloc<QueueEvent, QueueState> {
     try {
       final newState = state.withNewQueue(event.tracks, event.context, startIndex: event.startIndex);
       emit(newState);
+      
+      // Предзагружаем треки из новой очереди
+      _preloadQueueTracks(newState);
     } catch (e) {
       emit(state.withError(e.toString()));
     }
   }
 
   void _onNextRequested(QueueNextRequested event, Emitter<QueueState> emit) async {
+    // Если очередь пустая, пытаемся получить следующий трек через API
+    if (!state.hasQueue || state.currentQueue == null) {
+      try {
+        // Get current media item from handler
+        final handler = AudioServiceManager.getHandler();
+        final currentMediaItem = handler?.mediaItem.value;
+        if (currentMediaItem != null && currentMediaItem.extras != null) {
+          final trackId = currentMediaItem.extras!['trackId'] as int?;
+          if (trackId != null) {
+            // Пробуем получить следующий трек через API для разных контекстов
+            final contexts = ['popular', 'favorites', 'allTracks', 'vibe', 'unknown'];
+            Track? nextTrack;
+            String? usedContext;
+            
+            for (final context in contexts) {
+              nextTrack = await _musicRepository.getNextTrack(trackId, context);
+              if (nextTrack != null) {
+                usedContext = context;
+                break;
+              }
+            }
+            
+            if (nextTrack != null) {
+              // Создаем очередь из текущего и следующего трека
+              // Используем originalUrl из extras, если он есть (для кэшированных файлов)
+              final filePath = currentMediaItem.extras?['originalUrl'] as String? ?? currentMediaItem.id;
+              final currentTrack = Track(
+                id: trackId,
+                title: currentMediaItem.title,
+                artist: currentMediaItem.artist ?? '',
+                filePath: filePath,
+                durationMs: currentMediaItem.duration?.inMilliseconds ?? 0,
+                coverPath: currentMediaItem.extras?['coverPath'] as String?,
+                isLiked: currentMediaItem.extras?['isLiked'] as bool? ?? false,
+              );
+              
+              final newState = state.withNewQueue([currentTrack, nextTrack], usedContext ?? 'system', startIndex: 0);
+              final nextState = newState.withNextTrack();
+              emit(nextState);
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        // Если не удалось получить следующий трек, просто возвращаемся
+        return;
+      }
+      
+      // Если не удалось получить следующий трек, просто возвращаемся
+      return;
+    }
+
     if (state.currentQueue?.context == 'vibe' && !state.canGoNext) {
 
       emit(state.withLoadingNextPage());
@@ -83,6 +141,9 @@ class QueueBloc extends Bloc<QueueEvent, QueueState> {
 
     final newState = state.withNextTrack();
     emit(newState);
+    
+    // Предзагружаем треки из очереди после переключения
+    _preloadQueueTracks(newState);
 
   }
 
@@ -93,6 +154,9 @@ class QueueBloc extends Bloc<QueueEvent, QueueState> {
 
     final newState = state.withPreviousTrack();
     emit(newState);
+    
+    // Предзагружаем треки из очереди после переключения
+    _preloadQueueTracks(newState);
 
   }
 
@@ -223,5 +287,19 @@ class QueueBloc extends Bloc<QueueEvent, QueueState> {
 
   void _onErrorOccurred(QueueErrorOccurred event, Emitter<QueueState> emit) {
     emit(state.withError(event.error));
+  }
+
+  /// Предзагружает треки из очереди
+  void _preloadQueueTracks(QueueState state) {
+    if (state.currentQueue == null) return;
+
+    final queueTracks = state.currentQueue!.items.map((item) => item.track).toList();
+    final currentTrack = state.currentTrack;
+
+    _preloadService.preloadNextTrackInQueue(
+      currentTrack,
+      queueTracks,
+      state.currentIndex,
+    );
   }
 }

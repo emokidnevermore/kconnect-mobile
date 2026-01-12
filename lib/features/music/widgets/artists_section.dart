@@ -5,9 +5,8 @@
 // Используется для отображения рекомендованных исполнителей в музыке.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
-import '../../../theme/app_colors.dart';
 import '../domain/models/artist.dart';
 import '../presentation/blocs/music_state.dart';
 import 'artist_card.dart';
@@ -34,8 +33,8 @@ class ArtistsSection extends StatelessWidget {
       return SizedBox(
         height: 160,
         child: Shimmer.fromColors(
-          baseColor: AppColors.bgCard,
-          highlightColor: AppColors.bgCard.withValues(alpha: 0.5),
+          baseColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+          highlightColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -45,7 +44,7 @@ class ArtistsSection extends StatelessWidget {
                 width: 140,
                 margin: EdgeInsets.only(right: index == 4 ? 0 : 12),
                 decoration: BoxDecoration(
-                  color: AppColors.bgCard,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const SizedBox(height: 140),
@@ -60,7 +59,7 @@ class ArtistsSection extends StatelessWidget {
       return const SizedBox(
         height: 160,
         child: Center(
-          child: CupertinoActivityIndicator(),
+          child: CircularProgressIndicator(),
         ),
       );
     }

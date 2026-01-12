@@ -5,8 +5,8 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/widgets/staggered_list_item.dart';
 import '../../feed/domain/models/post.dart';
 import '../presentation/blocs/profile_state.dart';
 import '../presentation/blocs/profile_event.dart';
@@ -21,11 +21,15 @@ import '../../feed/widgets/post_shimmer.dart';
 class ProfilePostsSection extends StatelessWidget {
   final ProfileLoaded profileState;
   final Color accentColor;
+  final bool hasProfileBackground;
+  final ColorScheme? profileColorScheme;
 
   const ProfilePostsSection({
     super.key,
     required this.profileState,
     required this.accentColor,
+    required this.hasProfileBackground,
+    this.profileColorScheme,
   });
 
   @override
@@ -66,7 +70,10 @@ class ProfilePostsSection extends StatelessWidget {
               return const SizedBox();
             }
           }
-          return _buildPostCard(profileState.posts[regularIndex], context, accentColor);
+          return StaggeredListItem(
+            index: regularIndex,
+            child: _buildPostCard(profileState.posts[regularIndex], context, accentColor),
+          );
         },
         childCount: profileState.posts.length + (profileState.pinnedPost != null ? 1 : 0) + (profileState.isLoadingPosts ? 1 : 0) + (profileState.hasNextPosts ? 1 : 0),
       ),
@@ -78,10 +85,18 @@ class ProfilePostsSection extends StatelessWidget {
       post: post,
       key: ValueKey(post.id),
       opacity: 0.8,
+      transparentBackground: true,
+      heroTagPrefix: 'profile_post_media', // Уникальный префикс для постов в профиле
       onLike: () {
         context.read<ProfileBloc>().add(LikeProfilePostEvent(post.id, post));
       },
+      onVote: () {
+        // Trigger refresh of profile posts to update poll state
+        context.read<ProfileBloc>().add(RefreshProfileEvent());
+      },
       isLikeProcessing: profileState.processingLikes.contains(post.id),
+      hasProfileBackground: hasProfileBackground,
+      profileColorScheme: profileColorScheme,
     );
   }
 
@@ -92,15 +107,15 @@ class ProfilePostsSection extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            CupertinoIcons.exclamationmark_triangle,
+            Icons.warning,
             size: 48,
-            color: CupertinoColors.systemGrey,
+            color: Colors.grey,
           ),
           const SizedBox(height: 16),
           Text(
             'Не удалось загрузить посты',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: CupertinoColors.systemGrey,
+              color: Colors.grey,
             ),
             textAlign: TextAlign.center,
           ),
@@ -111,13 +126,13 @@ class ProfilePostsSection extends StatelessWidget {
               child: Text(
                 profileState.postsErrorMessage!,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: CupertinoColors.systemGrey2,
+                  color: Colors.grey.shade600,
                 ),
                 textAlign: TextAlign.center,
               ),
             ),
           const SizedBox(height: 24),
-          CupertinoButton.filled(
+          FilledButton(
             onPressed: () {
               context.read<ProfileBloc>().add(RetryProfilePostsEvent());
             },

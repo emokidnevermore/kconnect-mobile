@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:wolt_modal_sheet/wolt_modal_sheet.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../core/constants.dart';
 import '../presentation/blocs/feed_bloc.dart';
@@ -11,11 +8,13 @@ import '../presentation/blocs/feed_event.dart';
 import '../presentation/blocs/feed_state.dart';
 import '../../../features/feed/domain/models/post.dart';
 import '../widgets/comments_modal.dart';
+import '../widgets/repost_send_modal.dart';
 import 'post_utils.dart';
 import 'post_content.dart';
 import 'post_header.dart';
 import 'post_media.dart';
 import 'post_music.dart';
+import 'post_poll.dart';
 import 'post_actions.dart';
 import 'post_constants.dart';
 import 'post_context_menu.dart';
@@ -23,6 +22,8 @@ import '../../profile/utils/profile_navigation_utils.dart';
 import '../../../routes/route_names.dart';
 import '../../../core/media_item.dart';
 import '../../../core/widgets/profile_accent_color_provider.dart';
+import '../../../services/storage_service.dart';
+import '../../../core/utils/date_utils.dart';
 
 /// Карточка поста
 class PostCardNew extends StatelessWidget {
@@ -36,6 +37,15 @@ class PostCardNew extends StatelessWidget {
   final bool semiTransparent;
   final Function()? onLike;
   final bool? isLikeProcessing;
+  final Function()? onVote;
+  /// Префикс для Hero тегов медиа (для различения постов в ленте и профиле)
+  final String? heroTagPrefix;
+  /// Индекс поста в ленте (для уникальности Hero тегов при дубликатах)
+  final int? feedIndex;
+  /// Флаг наличия фонового изображения профиля (для локальной логики цвета карточек)
+  final bool? hasProfileBackground;
+  /// Локальная ColorScheme профиля (для использования цветов профиля вместо глобальных)
+  final ColorScheme? profileColorScheme;
 
   const PostCardNew({
     super.key,
@@ -49,22 +59,32 @@ class PostCardNew extends StatelessWidget {
     this.semiTransparent = false,
     this.onLike,
     this.isLikeProcessing,
+    this.onVote,
+    this.heroTagPrefix,
+    this.feedIndex,
+    this.hasProfileBackground,
+    this.profileColorScheme,
   }) : assert(post != null || postId != null, 'Either post or postId must be provided');
 
   @override
   Widget build(BuildContext context) {
     if (post != null) {
-      return _PostCardContent(
-        post: post!,
-        margin: margin,
-        opacity: opacity,
-        backgroundColor: backgroundColor,
-        isFullWidth: isFullWidth,
-        transparentBackground: transparentBackground,
-        semiTransparent: semiTransparent,
-        onLike: onLike,
-        isLikeProcessing: isLikeProcessing ?? false,
-      );
+        return _PostCardContent(
+          post: post!,
+          margin: margin,
+          opacity: opacity,
+          backgroundColor: backgroundColor,
+          isFullWidth: isFullWidth,
+          transparentBackground: transparentBackground,
+          semiTransparent: semiTransparent,
+          onLike: onLike,
+          isLikeProcessing: isLikeProcessing ?? false,
+          onVote: onVote,
+          heroTagPrefix: heroTagPrefix,
+          feedIndex: feedIndex,
+          hasProfileBackground: hasProfileBackground,
+          profileColorScheme: profileColorScheme,
+        );
     }
 
     return BlocBuilder<FeedBloc, FeedState>(
@@ -99,6 +119,11 @@ class PostCardNew extends StatelessWidget {
           semiTransparent: semiTransparent,
           onLike: onLike,
           isLikeProcessing: isLikeProcessing ?? state.processingPostLikes.contains(foundPost.id),
+          onVote: onVote,
+          heroTagPrefix: heroTagPrefix,
+          feedIndex: feedIndex,
+          hasProfileBackground: hasProfileBackground,
+          profileColorScheme: profileColorScheme,
         );
       },
     );
@@ -116,6 +141,11 @@ class _PostCardContent extends StatefulWidget {
   final bool semiTransparent;
   final Function()? onLike;
   final bool isLikeProcessing;
+  final Function()? onVote;
+  final String? heroTagPrefix;
+  final int? feedIndex;
+  final bool? hasProfileBackground;
+  final ColorScheme? profileColorScheme;
 
   const _PostCardContent({
     required this.post,
@@ -127,6 +157,11 @@ class _PostCardContent extends StatefulWidget {
     this.semiTransparent = false,
     this.onLike,
     this.isLikeProcessing = false,
+    this.onVote,
+    this.heroTagPrefix,
+    this.feedIndex,
+    this.hasProfileBackground,
+    this.profileColorScheme,
   });
 
   @override
@@ -165,6 +200,9 @@ class _PostCardContentState extends State<_PostCardContent> {
           arguments: {
             'items': validItems,
             'initialIndex': initialIndex,
+            'heroTagPrefix': widget.heroTagPrefix, // Передаем префикс для Hero тегов
+            'postId': post.id, // Передаем ID поста для уникальности Hero тегов
+            'feedIndex': widget.feedIndex, // Передаем индекс в ленте для уникальности Hero тегов
           },
         );
       } catch (e) {
@@ -186,30 +224,77 @@ class _PostCardContentState extends State<_PostCardContent> {
 
   void _openComments() {
     final postId = widget.post.id;
-
-    WoltModalSheet.show<void>(
+    
+    showModalBottomSheet<void>(
       context: context,
-      pageListBuilder: (modalSheetContext) {
-        return [
-          WoltModalSheetPage(
-            hasSabGradient: false,
-            navBarHeight: 50,
-            backgroundColor: const Color.fromARGB(255, 12, 12, 12),
-            topBarTitle: Text(
-              'Комментарии',
-              style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
-            ),
-            trailingNavBarWidget: IconButton(
-              padding: EdgeInsets.zero,
-              onPressed: Navigator.of(modalSheetContext).pop,
-              icon: Icon(
-                CupertinoIcons.xmark,
-                color: AppColors.textPrimary,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalSheetContext) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          snap: true,
+          snapSizes: const [0.5, 0.7, 0.95],
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainer,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
               ),
-            ),
-            child: CommentsBody(postId: postId, post: widget.post),
-          ),
-        ];
+              child: Column(
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Комментарии',
+                          style: AppTextStyles.h3.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => Navigator.of(modalSheetContext).pop(),
+                          icon: Icon(
+                            Icons.close,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Comments content
+                  Expanded(
+                    child: CommentsBody(
+                      postId: postId,
+                      post: widget.post,
+                      scrollController: scrollController,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
       },
     );
   }
@@ -223,8 +308,7 @@ class _PostCardContentState extends State<_PostCardContent> {
   }
 
   void _handleRepost() {
-    // TODO: Реализовать функцию поделиться - добавить диалог с опциями шаринга:
-    // копирование ссылки, поделиться в другие соцсети, отправить в чат
+    RepostSendModal.show(context, widget.post);
   }
 
   @override
@@ -239,6 +323,10 @@ class _PostCardContentState extends State<_PostCardContent> {
         isFullWidth: widget.isFullWidth,
         transparentBackground: widget.transparentBackground,
         semiTransparent: widget.semiTransparent,
+        heroTagPrefix: widget.heroTagPrefix,
+        feedIndex: widget.feedIndex,
+        hasProfileBackground: widget.hasProfileBackground,
+        profileColorScheme: widget.profileColorScheme,
         onCommentsPressed: _openComments,
         onLikePressed: _handleLike,
         onRepostPressed: _handleRepost,
@@ -247,24 +335,31 @@ class _PostCardContentState extends State<_PostCardContent> {
 
     // Обычный пост
     return RepaintBoundary(
-      child: Container(
-        padding: widget.transparentBackground
-            ? const EdgeInsets.symmetric(horizontal: PostConstants.transparentPadding)
-            : const EdgeInsets.all(PostConstants.cardHorizontalPadding),
-        margin: widget.transparentBackground
-            ? (widget.margin ?? EdgeInsets.zero)
-            : (widget.isFullWidth
-                ? EdgeInsets.zero
-                : (widget.margin ?? const EdgeInsets.symmetric(vertical: PostConstants.cardVerticalPadding, horizontal: 12))),
-        decoration: widget.transparentBackground
-            ? null
-            : BoxDecoration(
-                color: widget.semiTransparent
-                    ? (AppColors.bgDark.withValues(alpha: 0.5))
-                    : (widget.backgroundColor?.withValues(alpha: widget.opacity ?? 1.0) ?? AppColors.bgCard.withValues(alpha: widget.opacity ?? 1.0)),
-                borderRadius: widget.isFullWidth ? BorderRadius.zero : BorderRadius.circular(PostConstants.cardBorderRadius),
-              ),
-        child: Column(
+      child: Builder(
+        builder: (context) {
+          // Используем локальную логику профиля, если параметры переданы
+          final hasBackground = widget.hasProfileBackground ?? 
+              (StorageService.appBackgroundPathNotifier.value != null && StorageService.appBackgroundPathNotifier.value!.isNotEmpty);
+          final cardColor = widget.transparentBackground
+              ? (hasBackground 
+                  ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.7)
+                  : (widget.profileColorScheme?.surfaceContainerLow ?? Theme.of(context).colorScheme.surfaceContainerLow))
+              : (widget.semiTransparent
+                  ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.5)
+                  : (widget.backgroundColor?.withValues(alpha: widget.opacity ?? 1) ?? Theme.of(context).colorScheme.surfaceContainer.withValues(alpha: widget.opacity ?? 1.0)));
+          
+          return Card(
+            margin: widget.transparentBackground
+                ? (widget.margin ?? const EdgeInsets.symmetric(vertical: PostConstants.cardVerticalPadding, horizontal: 16))
+                : (widget.isFullWidth
+                    ? EdgeInsets.zero
+                    : (widget.margin ?? const EdgeInsets.symmetric(vertical: PostConstants.cardVerticalPadding, horizontal: 16))),
+            color: cardColor,
+            child: Padding(
+          padding: widget.transparentBackground
+              ? const EdgeInsets.symmetric(horizontal: PostConstants.transparentPadding, vertical: PostConstants.cardVerticalPaddingInside)
+              : const EdgeInsets.symmetric(horizontal: PostConstants.cardHorizontalPadding, vertical: PostConstants.cardVerticalPaddingInside),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Заголовок поста
@@ -292,6 +387,9 @@ class _PostCardContentState extends State<_PostCardContent> {
                 videoUrl: widget.post.video,
                 videoPoster: widget.post.videoPoster,
                 isFullWidth: widget.isFullWidth,
+                heroTagPrefix: widget.heroTagPrefix,
+                postId: widget.post.id,
+                feedIndex: widget.feedIndex,
                 onMediaTap: (index) => _openMediaViewer(widget.post, index),
               ),
               const SizedBox(height: PostConstants.elementSpacing),
@@ -300,6 +398,26 @@ class _PostCardContentState extends State<_PostCardContent> {
             // Музыка
             if (PostUtils.hasMusic(widget.post.music)) ...[
               PostMusic(tracks: widget.post.music!),
+              const SizedBox(height: PostConstants.elementSpacing),
+            ],
+
+            // Опрос
+            if (widget.post.poll != null) ...[
+              PostPoll(
+                poll: widget.post.poll!,
+                postId: widget.post.id,
+                transparentBackground: widget.transparentBackground,
+                semiTransparent: widget.semiTransparent,
+                backgroundColor: widget.backgroundColor,
+                opacity: widget.opacity,
+                hasProfileBackground: widget.hasProfileBackground,
+                profileColorScheme: widget.profileColorScheme,
+                onVote: widget.onVote,
+                onPollUpdate: widget.onVote != null ? (updatedPoll) {
+                  // Для оптимистичного обновления в профиле
+                  // (пока не реализовано, можно добавить позже)
+                } : null,
+              ),
               const SizedBox(height: PostConstants.elementSpacing),
             ],
 
@@ -318,6 +436,9 @@ class _PostCardContentState extends State<_PostCardContent> {
           ],
         ),
       ),
+      );
+        },
+      ),
     );
   }
 }
@@ -334,6 +455,10 @@ class _RepostCardContent extends StatefulWidget {
   final Function()? onCommentsPressed;
   final Function()? onLikePressed;
   final Function()? onRepostPressed;
+  final String? heroTagPrefix;
+  final int? feedIndex;
+  final bool? hasProfileBackground;
+  final ColorScheme? profileColorScheme;
 
   const _RepostCardContent({
     required this.post,
@@ -346,6 +471,10 @@ class _RepostCardContent extends StatefulWidget {
     this.onCommentsPressed,
     this.onLikePressed,
     this.onRepostPressed,
+    this.heroTagPrefix,
+    this.feedIndex,
+    this.hasProfileBackground,
+    this.profileColorScheme,
   });
 
   @override
@@ -387,10 +516,13 @@ class _RepostCardContentState extends State<_RepostCardContent> {
     if (validItems.isNotEmpty) {
       Navigator.of(context).pushNamed(
         RouteNames.mediaViewer,
-        arguments: {
-          'items': validItems,
-          'initialIndex': initialIndex,
-        },
+          arguments: {
+            'items': validItems,
+            'initialIndex': initialIndex,
+            'heroTagPrefix': widget.heroTagPrefix,
+            'postId': post.id, // Передаем ID поста для уникальности Hero тегов
+            'feedIndex': widget.feedIndex, // Передаем индекс в ленте для уникальности Hero тегов
+          },
       );
     }
   }
@@ -414,20 +546,20 @@ class _RepostCardContentState extends State<_RepostCardContent> {
         height: PostConstants.avatarSize,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: AppColors.bgCard,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
         ),
         child: ClipOval(
           child: CachedNetworkImage(
             imageUrl: effectiveAvatarUrl,
             fit: BoxFit.cover,
-            placeholder: (context, url) => const CupertinoActivityIndicator(radius: 8),
+            placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
             errorWidget: (context, url, error) => CachedNetworkImage(
               imageUrl: AppConstants.userAvatarPlaceholder,
               fit: BoxFit.cover,
-              placeholder: (context, url) => const CupertinoActivityIndicator(radius: 8),
-              errorWidget: (context, url, error) => const Icon(
-                CupertinoIcons.person,
-                color: CupertinoColors.systemGrey,
+              placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+              errorWidget: (context, url, error) => Icon(
+                Icons.person,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -446,22 +578,22 @@ class _RepostCardContentState extends State<_RepostCardContent> {
         height: PostConstants.repostAvatarSize,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: AppColors.bgCard,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
         ),
         child: ClipOval(
           child: CachedNetworkImage(
             imageUrl: effectiveAvatarUrl,
             fit: BoxFit.cover,
-            placeholder: (context, url) => const CupertinoActivityIndicator(radius: 8),
-            errorWidget: (context, url, error) => CachedNetworkImage(
-              imageUrl: AppConstants.userAvatarPlaceholder,
-              fit: BoxFit.cover,
-              placeholder: (context, url) => const CupertinoActivityIndicator(radius: 8),
-              errorWidget: (context, url, error) => const Icon(
-                CupertinoIcons.person,
-                color: CupertinoColors.systemGrey,
+            placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+              errorWidget: (context, url, error) => CachedNetworkImage(
+                imageUrl: AppConstants.userAvatarPlaceholder,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                errorWidget: (context, url, error) => Icon(
+                  Icons.person,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
           ),
         ),
       ),
@@ -515,24 +647,31 @@ class _RepostCardContentState extends State<_RepostCardContent> {
     final needsRepostExpansion = _needsExpansion(post.content);
     final needsOriginalExpansion = _needsExpansion(originalPost.content);
     final needsCommonExpand = (post.content.isNotEmpty && needsRepostExpansion) || (originalPost.content.isNotEmpty && needsOriginalExpansion);
-
+    
     return RepaintBoundary(
-      child: Container(
-        padding: transparentBackground
-            ? const EdgeInsets.symmetric(horizontal: PostConstants.transparentPadding)
-            : const EdgeInsets.all(PostConstants.cardHorizontalPadding),
-        margin: transparentBackground
-            ? (margin ?? EdgeInsets.zero)
-            : (isFullWidth ? EdgeInsets.zero : (margin ?? const EdgeInsets.symmetric(vertical: PostConstants.cardVerticalPadding, horizontal: 12))),
-        decoration: transparentBackground
-            ? null
-            : BoxDecoration(
-                color: semiTransparent
-                    ? (AppColors.bgDark.withValues(alpha: 0.5))
-                    : (backgroundColor?.withValues(alpha: opacity ?? 1.0) ?? AppColors.bgCard.withValues(alpha: opacity ?? 1.0)),
-                borderRadius: isFullWidth ? BorderRadius.zero : BorderRadius.circular(PostConstants.cardBorderRadius),
-              ),
-        child: Column(
+      child: Builder(
+        builder: (context) {
+          // Используем локальную логику профиля, если параметры переданы
+          final hasBackground = widget.hasProfileBackground ?? 
+              (StorageService.appBackgroundPathNotifier.value != null && StorageService.appBackgroundPathNotifier.value!.isNotEmpty);
+          final cardColor = transparentBackground
+              ? (hasBackground 
+                  ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.7)
+                  : (widget.profileColorScheme?.surfaceContainerLow ?? Theme.of(context).colorScheme.surfaceContainerLow))
+              : (semiTransparent
+                  ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.5)
+                  : (backgroundColor?.withValues(alpha: opacity ?? 1) ?? Theme.of(context).colorScheme.surfaceContainer.withValues(alpha: opacity ?? 1.0)));
+          
+          return Card(
+            margin: transparentBackground
+                ? (margin ?? const EdgeInsets.symmetric(vertical: PostConstants.cardVerticalPadding, horizontal: 16))
+                : (isFullWidth ? EdgeInsets.zero : (margin ?? const EdgeInsets.symmetric(vertical: PostConstants.cardVerticalPadding, horizontal: 16))),
+            color: cardColor,
+            child: Padding(
+              padding: transparentBackground
+                  ? const EdgeInsets.symmetric(horizontal: PostConstants.transparentPadding, vertical: PostConstants.cardVerticalPaddingInside)
+                  : const EdgeInsets.symmetric(horizontal: PostConstants.cardHorizontalPadding, vertical: PostConstants.cardVerticalPaddingInside),
+              child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header с обоими пользователями и иконкой репоста
@@ -540,37 +679,71 @@ class _RepostCardContentState extends State<_RepostCardContent> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Репостер в верхней строке
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Stack(
                   children: [
-                    _buildUserAvatar(context, repostAvatar),
-                    const SizedBox(width: PostConstants.elementSpacing),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => _navigateToProfile(context, repostUsername),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildUserAvatar(context, repostAvatar),
+                        const SizedBox(width: PostConstants.elementSpacing),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _navigateToProfile(context, repostUsername),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(repostName, style: AppTextStyles.postAuthor),
-                                if (post.isPinned) ...[
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    CupertinoIcons.pin_fill,
-                                    size: 14,
-                                    color: context.profileAccentColor,
-                                  ),
-                                ],
+                                Row(
+                                  children: [
+                                    Text(repostName, style: AppTextStyles.postAuthor),
+                                    if (post.isPinned) ...[
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.push_pin,
+                                        size: 14,
+                                        color: context.profileAccentColor,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                Text('@$repostUsername', style: AppTextStyles.postUsername),
                               ],
                             ),
-                            Text('@$repostUsername', style: AppTextStyles.postUsername),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Время и кнопка меню справа
+                    Positioned(
+                      right: -(transparentBackground ? PostConstants.transparentPadding : PostConstants.cardHorizontalPadding) + 12,
+                      top: 0,
+                      child: Container(
+                        height: PostConstants.avatarSize,
+                        alignment: Alignment.topRight,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (post.createdAt != 0)
+                              Text(
+                                formatRelativeTimeFromMillis(post.createdAt),
+                                style: AppTextStyles.postTime,
+                              ),
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
+                              icon: Icon(
+                                Icons.more_vert,
+                                size: 20,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                              onPressed: () => PostContextMenu.show(context, post),
+                            ),
                           ],
                         ),
                       ),
                     ),
-
-
                   ],
                 ),
 
@@ -583,9 +756,9 @@ class _RepostCardContentState extends State<_RepostCardContent> {
                       Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: Icon(
-                          CupertinoIcons.arrow_counterclockwise,
+                          Icons.refresh,
                           size: 16,
-                          color: AppColors.textSecondary,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                       _buildSmallUserAvatar(context, originalAvatar),
@@ -648,6 +821,9 @@ class _RepostCardContentState extends State<_RepostCardContent> {
                 videoUrl: originalPost.video,
                 videoPoster: originalPost.videoPoster,
                 isFullWidth: isFullWidth,
+                heroTagPrefix: widget.heroTagPrefix,
+                postId: originalPost.id,
+                feedIndex: widget.feedIndex,
                 onMediaTap: (index) => _openMediaViewer(originalPost, index),
               ),
               const SizedBox(height: PostConstants.elementSpacing),
@@ -656,6 +832,21 @@ class _RepostCardContentState extends State<_RepostCardContent> {
             // Музыка оригинального поста
             if (PostUtils.hasMusic(originalPost.music)) ...[
               PostMusic(tracks: originalPost.music!),
+              const SizedBox(height: PostConstants.elementSpacing),
+            ],
+
+            // Опрос оригинального поста
+            if (originalPost.poll != null) ...[
+              PostPoll(
+                poll: originalPost.poll!,
+                postId: post.id,
+                transparentBackground: transparentBackground,
+                semiTransparent: semiTransparent,
+                backgroundColor: backgroundColor,
+                opacity: opacity,
+                hasProfileBackground: widget.hasProfileBackground,
+                profileColorScheme: widget.profileColorScheme,
+              ),
               const SizedBox(height: PostConstants.elementSpacing),
             ],
 
@@ -689,10 +880,13 @@ class _RepostCardContentState extends State<_RepostCardContent> {
               onLikePressed: onLikePressed,
               onRepostPressed: onRepostPressed,
               onCommentsPressed: onCommentsPressed,
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
-      )
       );
+        },
+      ),
+    );
   }
 }

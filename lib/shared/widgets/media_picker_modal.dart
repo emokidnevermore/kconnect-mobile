@@ -1,11 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../theme/app_colors.dart';
 import '../../../../theme/app_text_styles.dart';
 import '../../../../core/utils/theme_extensions.dart';
 import '../../features/music/domain/models/track.dart';
@@ -46,11 +46,23 @@ class AlbumInfo {
 /// Хранит состояние выбора и возвращает результат
 class MediaPickerModal extends StatefulWidget {
   /// Callback для возврата выбранного контента
-  final Function(List<String> imagePaths, List<Track> tracks)? onMediaSelected;
+  /// imagePaths - список путей к изображениям
+  /// videoPath - путь к видео (только одно видео)
+  /// videoThumbnailPath - путь к превью видео
+  /// tracks - список выбранных треков
+  final Function(List<String> imagePaths, String? videoPath, String? videoThumbnailPath, List<Track> tracks)? onMediaSelected;
+
+  /// Показывать только вкладку с фото (скрывать музыку)
+  final bool photoOnly;
+
+  /// Ограничить выбор одним объектом (1 фото или 1 видео)
+  final bool singleSelection;
 
   const MediaPickerModal({
     super.key,
     this.onMediaSelected,
+    this.photoOnly = false,
+    this.singleSelection = false,
   });
 
   @override
@@ -58,15 +70,20 @@ class MediaPickerModal extends StatefulWidget {
 }
 
 class _MediaPickerModalState extends State<MediaPickerModal>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late TabController _tabController;
 
   final List<String> _selectedImagePaths = [];
+  String? _selectedVideoPath;
+  String? _selectedVideoThumbnailPath;
   final List<Track> _selectedTracks = [];
 
   List<AssetEntity> _galleryAssets = [];
   bool _loadingGallery = true;
   bool _hasGalleryPermission = false;
+
+  // Кэш для путей к файлам для оптимизации производительности
+  final Map<String, String> _assetPathCache = {};
 
   List<AssetPathEntity> _albums = [];
   List<AlbumInfo> _albumInfos = [];
@@ -81,17 +98,23 @@ class _MediaPickerModalState extends State<MediaPickerModal>
   final ScrollController _scrollController = ScrollController();
   final ScrollController _photoScrollController = ScrollController();
   Timer? _debounceTimer;
+  Timer? _paginationDebounceTimer;
   String _currentQuery = '';
   bool _musicLoaded = false;
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: widget.photoOnly ? 1 : 2, vsync: this);
     _searchController.addListener(_onSearchChanged);
     _scrollController.addListener(_onScroll);
     _photoScrollController.addListener(_onPhotoScroll);
-    _tabController.addListener(_onTabChanged);
+    if (!widget.photoOnly) {
+      _tabController.addListener(_onTabChanged);
+    }
 
     _loadGallery();
 
@@ -118,32 +141,47 @@ class _MediaPickerModalState extends State<MediaPickerModal>
     }
   }
 
-  /// Загружает следующую страницу фото
+  /// Загружает следующую страницу фото с debounce
   Future<void> _loadMoreAlbumPhotos() async {
     if (_isLoadingMore || !_hasMorePages || _currentAlbum == null) return;
 
-    setState(() => _isLoadingMore = true);
+    // Отменяем предыдущий таймер если он есть
+    _paginationDebounceTimer?.cancel();
 
-    try {
-      final assets = await _currentAlbum!.getAssetListPaged(page: _currentPage, size: 50);
+    // Устанавливаем debounce для setState
+    _paginationDebounceTimer = Timer(const Duration(milliseconds: 100), () async {
+      if (!mounted) return;
 
-      // Фильтруем WebP
-      final filteredAssets = assets.where((asset) {
-        final fileName = asset.title?.toLowerCase() ?? '';
-        return !fileName.endsWith('.webp');
-      }).toList();
+      setState(() => _isLoadingMore = true);
 
-      setState(() {
-        _galleryAssets.addAll(filteredAssets);
+      try {
+        final assets = await _currentAlbum!.getAssetListPaged(page: _currentPage, size: 50);
 
-        _currentPage--;
+        // Фильтруем WebP
+        final filteredAssets = assets.where((asset) {
+          final fileName = asset.title?.toLowerCase() ?? '';
+          return !fileName.endsWith('.webp');
+        }).toList();
 
-        _hasMorePages = _currentPage >= 0;
-        _isLoadingMore = false;
-      });
-    } catch (e) {
-      setState(() => _isLoadingMore = false);
-    }
+        // На iOS порядок уже правильный, не нужно делать reverse
+        final orderedAssets = Platform.isIOS ? filteredAssets : filteredAssets.reversed.toList();
+
+        if (mounted) {
+          setState(() {
+            _galleryAssets.addAll(orderedAssets);
+
+            _currentPage--;
+
+            _hasMorePages = _currentPage >= 0;
+            _isLoadingMore = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoadingMore = false);
+        }
+      }
+    });
   }
 
   @override
@@ -156,6 +194,8 @@ class _MediaPickerModalState extends State<MediaPickerModal>
     _photoScrollController.dispose();
     _searchController.dispose();
     _debounceTimer?.cancel();
+    _paginationDebounceTimer?.cancel();
+    _assetPathCache.clear();
     super.dispose();
   }
 
@@ -248,10 +288,14 @@ class _MediaPickerModalState extends State<MediaPickerModal>
         try {
           final totalAssets = await imageAllAlbum.assetCountAsync;
           if (totalAssets > 0) {
-            final coverList = await imageAllAlbum.getAssetListRange(
-              start: totalAssets - 1,
-              end: totalAssets,
-            );
+            // На iOS порядок уже правильный (от новых к старым), берем первый элемент
+            // На Android нужно брать последний
+            final coverList = Platform.isIOS
+                ? await imageAllAlbum.getAssetListRange(start: 0, end: 1)
+                : await imageAllAlbum.getAssetListRange(
+                    start: totalAssets - 1,
+                    end: totalAssets,
+                  );
             if (coverList.isNotEmpty) {
               imagePreview = coverList.first;
             }
@@ -272,10 +316,14 @@ class _MediaPickerModalState extends State<MediaPickerModal>
         try {
           final totalAssets = await videoAllAlbum.assetCountAsync;
           if (totalAssets > 0) {
-            final coverList = await videoAllAlbum.getAssetListRange(
-              start: totalAssets - 1,
-              end: totalAssets,
-            );
+            // На iOS порядок уже правильный (от новых к старым), берем первый элемент
+            // На Android нужно брать последний
+            final coverList = Platform.isIOS
+                ? await videoAllAlbum.getAssetListRange(start: 0, end: 1)
+                : await videoAllAlbum.getAssetListRange(
+                    start: totalAssets - 1,
+                    end: totalAssets,
+                  );
             if (coverList.isNotEmpty) {
               videoPreview = coverList.first;
             }
@@ -325,10 +373,14 @@ class _MediaPickerModalState extends State<MediaPickerModal>
 
         AssetEntity? lastPhoto;
         if (assetCount > 0) {
-          final coverList = await album.getAssetListRange(
-            start: assetCount - 1,
-            end: assetCount,
-          );
+          // На iOS порядок уже правильный (от новых к старым), берем первый элемент
+          // На Android нужно брать последний
+          final coverList = Platform.isIOS
+              ? await album.getAssetListRange(start: 0, end: 1)
+              : await album.getAssetListRange(
+                  start: assetCount - 1,
+                  end: assetCount,
+                );
           if (coverList.isNotEmpty) {
             lastPhoto = coverList.first;
           }
@@ -372,19 +424,22 @@ class _MediaPickerModalState extends State<MediaPickerModal>
       final filteredAssets = assets.where((asset) {
         final fileName = asset.title?.toLowerCase() ?? '';
         return !fileName.endsWith('.webp');
-      }).toList().reversed.toList();
+      }).toList();
+
+      // На iOS порядок уже правильный, не нужно делать reverse
+      final orderedAssets = Platform.isIOS ? filteredAssets : filteredAssets.reversed.toList();
 
       if (reset) {
-        _galleryAssets = filteredAssets;
+        _galleryAssets = orderedAssets;
       } else {
-        _galleryAssets.addAll(filteredAssets);
+        _galleryAssets.addAll(orderedAssets);
       }
 
       _currentPage--;
 
-      _hasMorePages = _currentPage >= 0 || filteredAssets.length == 50;
+      _hasMorePages = _currentPage >= 0 || orderedAssets.length == 50;
 
-      if (reset && album.isAll && filteredAssets.length < 25 && _hasMorePages) {
+      if (reset && album.isAll && orderedAssets.length < 25 && _hasMorePages) {
         await _loadMoreAlbumPhotos();
       }
 
@@ -412,19 +467,90 @@ class _MediaPickerModalState extends State<MediaPickerModal>
   }
 
   void _toggleImageSelection(AssetEntity asset) async {
+    final isVideo = asset.type == AssetType.video;
+
+    // В режиме singleSelection автоматически снимаем предыдущий выбор
+    if (widget.singleSelection) {
+      if (isVideo && _selectedImagePaths.isNotEmpty) {
+        _selectedImagePaths.clear();
+      }
+      if (!isVideo && _selectedVideoPath != null) {
+        _selectedVideoPath = null;
+        _selectedVideoThumbnailPath = null;
+      }
+      // Если выбран другой объект того же типа, снимаем его
+      if (isVideo && _selectedVideoPath != null) {
+        _selectedVideoPath = null;
+        _selectedVideoThumbnailPath = null;
+      }
+      if (!isVideo && _selectedImagePaths.isNotEmpty) {
+        _selectedImagePaths.clear();
+      }
+    } else {
+
+    }
+
     final file = await asset.file;
     if (file == null) return;
 
     final path = file.path;
 
-    setState(() {
-      if (_selectedImagePaths.contains(path)) {
-        _selectedImagePaths.remove(path);
-      } else {
-        _selectedImagePaths.add(path);
-      }
-    });
+    // Валидация: только одно видео (если уже выбрано другое видео, заменяем его)
+    if (isVideo && _selectedVideoPath != null && _selectedVideoPath != path) {
+      // Заменяем старое видео на новое
+      _selectedVideoPath = null;
+      _selectedVideoThumbnailPath = null;
+    }
+
+    if (isVideo) {
+      // Обработка видео
+      setState(() {
+        if (_selectedVideoPath == path) {
+          // Удаляем видео
+          _selectedVideoPath = null;
+          _selectedVideoThumbnailPath = null;
+        } else {
+          // Выбираем видео и генерируем thumbnail
+          _selectedVideoPath = path;
+          _generateVideoThumbnail(asset);
+        }
+      });
+    } else {
+      // Обработка изображений
+      setState(() {
+        if (_selectedImagePaths.contains(path)) {
+          _selectedImagePaths.remove(path);
+        } else {
+          _selectedImagePaths.add(path);
+        }
+      });
+    }
   }
+
+  /// Генерирует и сохраняет thumbnail для видео
+  Future<void> _generateVideoThumbnail(AssetEntity asset) async {
+    try {
+      final thumbnailBytes = await asset.thumbnailDataWithSize(
+        const ThumbnailSize.square(400),
+      );
+
+      if (thumbnailBytes != null && mounted) {
+        // Сохраняем thumbnail во временный файл
+        final tempDir = Directory.systemTemp;
+        final thumbnailFile = File('${tempDir.path}/video_thumbnail_${asset.id}.jpg');
+        await thumbnailFile.writeAsBytes(thumbnailBytes);
+
+        setState(() {
+          _selectedVideoThumbnailPath = thumbnailFile.path;
+        });
+      }
+    } catch (e) {
+      debugPrint('Ошибка генерации thumbnail для видео: $e');
+      // Продолжаем без thumbnail
+    }
+  }
+
+
 
   void _toggleTrackSelection(Track track) {
 
@@ -438,7 +564,12 @@ class _MediaPickerModalState extends State<MediaPickerModal>
   }
 
   void _confirmSelection() {
-    widget.onMediaSelected?.call(_selectedImagePaths, _selectedTracks);
+    widget.onMediaSelected?.call(
+      _selectedImagePaths,
+      _selectedVideoPath,
+      _selectedVideoThumbnailPath,
+      _selectedTracks,
+    );
     Navigator.of(context).pop();
   }
 
@@ -454,11 +585,11 @@ class _MediaPickerModalState extends State<MediaPickerModal>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(CupertinoIcons.photo, size: 16),
+                const Icon(Icons.photo, size: 16),
                 const SizedBox(width: 4),
                 Text(_currentAlbumName),
                 const SizedBox(width: 2),
-                const Icon(CupertinoIcons.chevron_down, size: 12),
+                const Icon(Icons.expand_more, size: 12),
               ],
             ),
           ),
@@ -471,7 +602,7 @@ class _MediaPickerModalState extends State<MediaPickerModal>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(CupertinoIcons.photo, size: 16),
+              const Icon(Icons.photo, size: 16),
               const SizedBox(width: 4),
               const Text('Фото'),
             ],
@@ -489,7 +620,7 @@ class _MediaPickerModalState extends State<MediaPickerModal>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(CupertinoIcons.music_note, size: 16),
+            const Icon(Icons.music_note, size: 16),
             const SizedBox(width: 4),
             const Text('Музыка'),
           ],
@@ -507,7 +638,7 @@ class _MediaPickerModalState extends State<MediaPickerModal>
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.6,
         decoration: BoxDecoration(
-          color: AppColors.bgCard,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         ),
         child: Column(
@@ -517,17 +648,16 @@ class _MediaPickerModalState extends State<MediaPickerModal>
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(color: AppColors.textSecondary.withValues(alpha: 0.1), width: 1),
+                  bottom: BorderSide(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.1), width: 1),
                 ),
               ),
               child: Row(
                 children: [
-                  Text('Выберите альбом', style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary)),
+                  Text('Выберите альбом', style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface)),
                   const Spacer(),
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
+                  TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: Text('Закрыть', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
+                    child: Text('Закрыть', style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   ),
                 ],
               ),
@@ -542,90 +672,95 @@ class _MediaPickerModalState extends State<MediaPickerModal>
                   final album = albumInfo.album;
                   final isSelected = album == _currentAlbum;
 
-                  return CupertinoButton(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    onPressed: () {
-                      _switchToAlbum(album);
-                      Navigator.of(context).pop();
-                    },
-                    child: Row(
-                      children: [
-                        // Превью последнего фото или иконка
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppColors.bgDark,
-                            borderRadius: BorderRadius.circular(8),
-                            border: isSelected ? Border.all(color: context.dynamicPrimaryColor, width: 2) : null,
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        _switchToAlbum(album);
+                        Navigator.of(context).pop();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        child: Row(
+                          children: [
+                          // Превью последнего фото или иконка
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              borderRadius: BorderRadius.circular(8),
+                              border: isSelected ? Border.all(color: context.dynamicPrimaryColor, width: 2) : null,
+                            ),
+                            child: albumInfo.lastPhotoPreview != null
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Image.memory(
+                                      albumInfo.lastPhotoPreview!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) =>
+                                          Icon(Icons.photo, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                    ),
+                                  )
+                                : albumInfo.lastPhoto != null
+                                    ? FutureBuilder<Uint8List?>(
+                                        future: albumInfo.lastPhoto!.thumbnailDataWithSize(const ThumbnailSize.square(80)),
+                                        builder: (context, snapshot) {
+                                          if (snapshot.hasData && snapshot.data != null) {
+                                            // Сохраняем превью в кэш для будущих использований
+                                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                                              if (mounted) {
+                                                setState(() {
+                                                  _albumInfos[index] = albumInfo.copyWithPreview(snapshot.data!);
+                                                });
+                                              }
+                                            });
+
+                                            return ClipRRect(
+                                              borderRadius: BorderRadius.circular(6),
+                                              child: Image.memory(
+                                                snapshot.data!,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (context, error, stackTrace) =>
+                                                    Icon(Icons.photo, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                              ),
+                                            );
+                                          } else {
+                                            return Icon(Icons.photo, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant);
+                                          }
+                                        },
+                                      )
+                                    : Icon(Icons.photo, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
                           ),
-                          child: albumInfo.lastPhotoPreview != null
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Image.memory(
-                                    albumInfo.lastPhotoPreview!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        const Icon(CupertinoIcons.photo, size: 20, color: AppColors.textSecondary),
+                          const SizedBox(width: 12),
+
+                          // Название и количество фото
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  albumInfo.name,
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurface,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                )
-                              : albumInfo.lastPhoto != null
-                                  ? FutureBuilder<Uint8List?>(
-                                      future: albumInfo.lastPhoto!.thumbnailDataWithSize(const ThumbnailSize.square(80)),
-                                      builder: (context, snapshot) {
-                                        if (snapshot.hasData && snapshot.data != null) {
-                                          // Сохраняем превью в кэш для будущих использований
-                                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                                            if (mounted) {
-                                              setState(() {
-                                                _albumInfos[index] = albumInfo.copyWithPreview(snapshot.data!);
-                                              });
-                                            }
-                                          });
-
-                                          return ClipRRect(
-                                            borderRadius: BorderRadius.circular(6),
-                                            child: Image.memory(
-                                              snapshot.data!,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (context, error, stackTrace) =>
-                                                  const Icon(CupertinoIcons.photo, size: 20, color: AppColors.textSecondary),
-                                            ),
-                                          );
-                                        } else {
-                                          return const Icon(CupertinoIcons.photo, size: 20, color: AppColors.textSecondary);
-                                        }
-                                      },
-                                    )
-                                  : const Icon(CupertinoIcons.photo, size: 20, color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(width: 12),
-
-                        // Название и количество фото
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                albumInfo.name,
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  color: AppColors.textPrimary,
-                                  fontWeight: FontWeight.w500,
                                 ),
-                              ),
-                              // Количество фото
-                              Text(
-                                '${albumInfo.assetCount}',
-                                style: AppTextStyles.bodySecondary.copyWith(color: AppColors.textSecondary),
-                              ),
-                            ],
+                                // Количество фото
+                                Text(
+                                  '${albumInfo.assetCount}',
+                                  style: AppTextStyles.bodySecondary.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
 
-                        // Индикатор выбора
-                        if (isSelected)
-                          Icon(CupertinoIcons.checkmark, color: context.dynamicPrimaryColor, size: 20),
-                      ],
+                            // Индикатор выбора
+                            if (isSelected)
+                              Icon(Icons.check, color: context.dynamicPrimaryColor, size: 20),
+                          ],
+                        ),
+                      ),
                     ),
                   );
                 },
@@ -664,15 +799,16 @@ class _MediaPickerModalState extends State<MediaPickerModal>
     });
   }
 
-  bool get _hasContent => _selectedImagePaths.isNotEmpty || _selectedTracks.isNotEmpty;
-  int get _totalSelected => _selectedImagePaths.length + _selectedTracks.length;
+  bool get _hasContent => _selectedImagePaths.isNotEmpty || _selectedVideoPath != null || _selectedTracks.isNotEmpty;
+  int get _totalSelected => _selectedImagePaths.length + (_selectedVideoPath != null ? 1 : 0) + _selectedTracks.length;
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     return Container(
       height: MediaQuery.of(context).size.height * 0.8,
       decoration: BoxDecoration(
-        color: AppColors.bgCard,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Column(
@@ -680,32 +816,35 @@ class _MediaPickerModalState extends State<MediaPickerModal>
           // Заголовок с кнопками
           _buildHeader(),
 
-          // TabBar с динамическими кнопками
-          Material(
-            color: Colors.transparent,
-            child: TabBar(
-              controller: _tabController,
-              tabs: [
-                _buildPhotoTabLabel(),
-                _buildMusicTabLabel(),
-              ],
-              labelColor: context.dynamicPrimaryColor,
-              unselectedLabelColor: AppColors.textSecondary,
-              indicatorColor: context.dynamicPrimaryColor,
-              labelStyle: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-              unselectedLabelStyle: AppTextStyles.bodyMedium,
+          // TabBar с динамическими кнопками (скрыт если photoOnly)
+          if (!widget.photoOnly)
+            Material(
+              color: Colors.transparent,
+              child: TabBar(
+                controller: _tabController,
+                tabs: [
+                  _buildPhotoTabLabel(),
+                  _buildMusicTabLabel(),
+                ],
+                labelColor: context.dynamicPrimaryColor,
+                unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                indicatorColor: context.dynamicPrimaryColor,
+                labelStyle: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                unselectedLabelStyle: AppTextStyles.bodyMedium,
+              ),
             ),
-          ),
 
           // Содержимое табов
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildPhotoTab(),
-                _buildMusicTab(),
-              ],
-            ),
+            child: widget.photoOnly
+                ? _buildPhotoTab()
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildPhotoTab(),
+                      _buildMusicTab(),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -717,26 +856,44 @@ class _MediaPickerModalState extends State<MediaPickerModal>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: AppColors.textSecondary.withValues(alpha: 0.1), width: 1),
+          bottom: BorderSide(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.1), width: 1),
         ),
       ),
       child: Row(
         children: [
-          CupertinoButton(
-            padding: EdgeInsets.zero,
+          TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('Закрыть', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
+            child: Text('Закрыть', style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ),
           const Spacer(),
-          Text('Добавить контент', style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary)),
+          // В режиме photoOnly показываем выбор альбома, иначе "Добавить контент"
+          widget.photoOnly
+              ? TextButton(
+                  onPressed: _showAlbumSelector,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _currentAlbumName,
+                        style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.expand_more,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ],
+                  ),
+                )
+              : Text('Добавить контент', style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface)),
           const Spacer(),
-          CupertinoButton(
-            padding: EdgeInsets.zero,
+          TextButton(
             onPressed: _hasContent ? _confirmSelection : null,
             child: Text(
               _hasContent ? 'Готово ($_totalSelected)' : 'Готово',
               style: AppTextStyles.bodyMedium.copyWith(
-                color: _hasContent ? context.dynamicPrimaryColor : AppColors.textSecondary,
+                color: _hasContent ? context.dynamicPrimaryColor : Theme.of(context).colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -748,7 +905,7 @@ class _MediaPickerModalState extends State<MediaPickerModal>
 
   Widget _buildPhotoTab() {
     if (_loadingGallery) {
-      return const Center(child: CupertinoActivityIndicator());
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (!_hasGalleryPermission) {
@@ -758,15 +915,15 @@ class _MediaPickerModalState extends State<MediaPickerModal>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(CupertinoIcons.exclamationmark_triangle, size: 48, color: AppColors.textSecondary),
+              Icon(Icons.warning, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
               const SizedBox(height: 16),
-              Text('Нет доступа к галерее', style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary)),
+              Text('Нет доступа к галерее', style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface)),
               const SizedBox(height: 8),
-              Text('Предоставьте разрешение для доступа к фото', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary), textAlign: TextAlign.center),
+              Text('Предоставьте разрешение для доступа к фото', style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant), textAlign: TextAlign.center),
               const SizedBox(height: 24),
-              CupertinoButton(
+              TextButton(
                 onPressed: _loadGallery,
-                child: Text('Попробовать снова', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primaryPurple)),
+                child: Text('Попробовать снова', style: AppTextStyles.bodyMedium.copyWith(color: context.dynamicPrimaryColor)),
               ),
             ],
           ),
@@ -779,9 +936,9 @@ class _MediaPickerModalState extends State<MediaPickerModal>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(CupertinoIcons.photo, size: 48, color: AppColors.textSecondary),
+            Icon(Icons.photo, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
             const SizedBox(height: 16),
-            Text('Галерея пуста', style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary)),
+            Text('Галерея пуста', style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface)),
           ],
         ),
       );
@@ -800,72 +957,106 @@ class _MediaPickerModalState extends State<MediaPickerModal>
         // Индикатор загрузки
         if (index == _galleryAssets.length) {
           return Container(
-            color: AppColors.bgDark,
-            child: const Center(child: CupertinoActivityIndicator()),
+            color: Theme.of(context).colorScheme.surface,
+            child: const Center(child: CircularProgressIndicator()),
           );
         }
 
         final asset = _galleryAssets[index];
-        return FutureBuilder<String?>(
-          future: _getAssetPath(asset),
-          builder: (context, snapshot) {
-            final path = snapshot.data;
-            final isSelected = path != null && _selectedImagePaths.contains(path);
+        return RepaintBoundary(
+          child: FutureBuilder<String?>(
+            future: _getAssetPath(asset),
+            builder: (context, snapshot) {
+              final path = snapshot.data;
+              final isSelected = path != null && _selectedImagePaths.contains(path);
 
-            return GestureDetector(
-              onTap: () => _toggleImageSelection(asset),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Image(
-                      image: AssetEntityImageProvider(asset, isOriginal: false, thumbnailSize: const ThumbnailSize.square(200)),
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(color: AppColors.bgDark, child: const CupertinoActivityIndicator());
-                      },
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(color: AppColors.bgDark, child: const Icon(CupertinoIcons.exclamationmark_triangle, color: Colors.white));
-                      },
-                    ),
-                  ),
-                  if (isSelected)
-                    Positioned(
-                      top: 4, right: 4,
-                      child: Container(
-                        width: 24, height: 24,
-                        decoration: BoxDecoration(
-                          color: context.dynamicPrimaryColor,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
+              return GestureDetector(
+                onTap: () => _toggleImageSelection(asset),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Image(
+                        image: AssetEntityImageProvider(
+                          asset,
+                          isOriginal: false,
+                          // Оптимизация размера thumbnail для iOS
+                          thumbnailSize: Platform.isIOS
+                              ? const ThumbnailSize.square(150)
+                              : const ThumbnailSize.square(200),
                         ),
-                        child: const Icon(CupertinoIcons.checkmark, size: 14, color: Colors.white),
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            color: Theme.of(context).colorScheme.surface,
+                            child: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: Theme.of(context).colorScheme.surface,
+                            child: const Center(
+                              child: Icon(
+                                Icons.warning,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
-                  if (asset.type == AssetType.video)
-                    Positioned(
-                      bottom: 4, left: 4,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(4)),
-                        child: const Icon(CupertinoIcons.video_camera, size: 12, color: Colors.white),
+                    if (isSelected)
+                      Positioned(
+                        top: 4, right: 4,
+                        child: Container(
+                          width: 24, height: 24,
+                          decoration: BoxDecoration(
+                            color: context.dynamicPrimaryColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: const Icon(Icons.check, size: 14, color: Colors.white),
+                        ),
                       ),
-                    ),
-                  if (!isSelected && _selectedImagePaths.length >= 10)
+                    if (asset.type == AssetType.video)
+                      Positioned(
+                        bottom: 4, left: 4,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(4)),
+                          child: const Icon(Icons.videocam, size: 12, color: Colors.white),
+                        ),
+                      ),
+                  if (!isSelected && _selectedImagePaths.length >= 10 && asset.type != AssetType.video)
                     Positioned.fill(child: Container(color: Colors.black.withValues(alpha: 0.3))),
-                ],
-              ),
-            );
-          },
+                  if (!isSelected && asset.type == AssetType.video && _selectedVideoPath != null && path != _selectedVideoPath)
+                    Positioned.fill(child: Container(color: Colors.black.withValues(alpha: 0.3))),
+                  ],
+                ),
+              );
+            },
+          ),
         );
       },
     );
   }
 
   Future<String?> _getAssetPath(AssetEntity asset) async {
+    // Проверяем кэш
+    if (_assetPathCache.containsKey(asset.id)) {
+      return _assetPathCache[asset.id];
+    }
+
     try {
       final file = await asset.file;
-      return file?.path;
+      final path = file?.path;
+      if (path != null) {
+        _assetPathCache[asset.id] = path;
+      }
+      return path;
     } catch (e) {
       return null;
     }
@@ -876,13 +1067,23 @@ class _MediaPickerModalState extends State<MediaPickerModal>
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: CupertinoSearchTextField(
-            controller: _searchController,
-            placeholder: 'Введите название трека, артиста...',
-            style: const TextStyle(color: AppColors.textPrimary),
-            placeholderStyle: const TextStyle(color: AppColors.textSecondary),
-            backgroundColor: AppColors.bgDark,
-            borderRadius: BorderRadius.circular(12),
+          child: Material(
+            color: Colors.transparent,
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Введите название трека, артиста...',
+                hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surface,
+                prefixIcon: Icon(Icons.search, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            ),
           ),
         ),
         Expanded(
@@ -902,7 +1103,7 @@ class _MediaPickerModalState extends State<MediaPickerModal>
 
   Widget _buildFavoritesSection(MusicState state) {
     if (state.favoritesStatus == MusicLoadStatus.loading && state.favorites.isEmpty) {
-      return const Center(child: CupertinoActivityIndicator());
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (state.favoritesStatus == MusicLoadStatus.failure && state.favorites.isEmpty) {
@@ -910,13 +1111,13 @@ class _MediaPickerModalState extends State<MediaPickerModal>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(CupertinoIcons.exclamationmark_triangle, size: 48, color: AppColors.textSecondary),
+            Icon(Icons.warning, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
             const SizedBox(height: 16),
-            Text('Ошибка загрузки', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary)),
+            Text('Ошибка загрузки', style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 8),
-            CupertinoButton(
+            TextButton(
               onPressed: () => context.read<MusicBloc>().add(MusicFavoritesFetched()),
-              child: Text('Повторить', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primaryPurple)),
+              child: Text('Повторить', style: AppTextStyles.bodyMedium.copyWith(color: context.dynamicPrimaryColor)),
             ),
           ],
         ),
@@ -928,11 +1129,11 @@ class _MediaPickerModalState extends State<MediaPickerModal>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(CupertinoIcons.heart, size: 48, color: AppColors.textSecondary),
+            Icon(Icons.favorite_border, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
             const SizedBox(height: 16),
-            Text('У вас пока нет любимых треков', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary), textAlign: TextAlign.center),
+            Text('У вас пока нет любимых треков', style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurface), textAlign: TextAlign.center),
             const SizedBox(height: 8),
-            Text('Добавьте треки в избранное в разделе музыки', style: AppTextStyles.bodySecondary.copyWith(color: AppColors.textSecondary), textAlign: TextAlign.center),
+            Text('Добавьте треки в избранное в разделе музыки', style: AppTextStyles.bodySecondary.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant), textAlign: TextAlign.center),
           ],
         ),
       );
@@ -947,7 +1148,7 @@ class _MediaPickerModalState extends State<MediaPickerModal>
         itemCount: state.favorites.length + (state.favoritesHasNextPage ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == state.favorites.length) {
-            return const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: CupertinoActivityIndicator()));
+            return const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: CircularProgressIndicator()));
           }
 
           final track = state.favorites[index];
@@ -973,7 +1174,7 @@ class _MediaPickerModalState extends State<MediaPickerModal>
 
   Widget _buildSearchResults(MusicState state) {
     if (state.searchStatus == MusicLoadStatus.loading) {
-      return const Center(child: CupertinoActivityIndicator());
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (state.searchStatus == MusicLoadStatus.failure) {
@@ -981,9 +1182,9 @@ class _MediaPickerModalState extends State<MediaPickerModal>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(CupertinoIcons.exclamationmark_triangle, size: 48, color: AppColors.error),
+            Icon(Icons.warning, size: 48, color: Theme.of(context).colorScheme.error),
             const SizedBox(height: 16),
-            Text('Ошибка поиска', style: AppTextStyles.h3.copyWith(color: AppColors.error)),
+            Text('Ошибка поиска', style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.error)),
             const SizedBox(height: 8),
             Text('Попробуйте ещё раз', style: AppTextStyles.bodySecondary),
           ],
@@ -996,9 +1197,9 @@ class _MediaPickerModalState extends State<MediaPickerModal>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(CupertinoIcons.search, size: 48, color: AppColors.textSecondary),
+            Icon(Icons.search, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
             const SizedBox(height: 16),
-            Text('Ничего не найдено', style: AppTextStyles.h3.copyWith(color: AppColors.textSecondary)),
+            Text('Ничего не найдено', style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 8),
             Text('Попробуйте изменить запрос', style: AppTextStyles.bodySecondary),
           ],

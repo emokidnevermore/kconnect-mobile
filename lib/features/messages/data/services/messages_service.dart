@@ -72,17 +72,59 @@ class MessagesService {
     }
   }
 
+  /// Создает новый групповой чат
+  ///
+  /// Выполняет POST запрос для создания нового группового чата.
+  ///
+  /// [title] - название группового чата
+  /// [userIds] - список ID пользователей для добавления в группу
+  /// Returns: ID созданного чата
+  /// Throws: Exception при ошибке создания чата
+  Future<int> createGroupChat(String title, List<int> userIds) async {
+    try {
+      final res = await _client.post('/apiMes/messenger/chats/group', {
+        'title': title,
+        'user_ids': userIds,
+      });
+
+      if (res.statusCode == 200) {
+        final data = res.data as Map<String, dynamic>;
+        if (data['success'] == true) {
+          return data['chat_id'] as int;
+        } else {
+          throw Exception('Не удалось создать групповой чат: ${data['message'] ?? 'Неизвестная ошибка'}');
+        }
+      } else {
+        throw Exception('Не удалось создать групповой чат: ${res.statusCode}');
+      }
+    } on DioException catch (e) {
+      throw Exception('Не удалось создать групповой чат: ${e.response?.statusCode ?? 'Ошибка сети'}');
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   /// Получает список сообщений чата
   ///
-  /// Выполняет GET запрос для получения всех сообщений указанного чата.
+  /// Выполняет GET запрос для получения сообщений указанного чата.
+  /// Поддерживает пагинацию через параметр before_id.
   /// Сортирует сообщения по времени создания (новые первыми).
   ///
   /// [chatId] - ID чата, сообщения которого нужно получить
+  /// [beforeId] - ID сообщения для пагинации (загрузить сообщения до этого ID)
   /// Returns: Список объектов Message, отсортированный по времени (новые первыми)
   /// Throws: Exception при ошибке сети или сервера
-  Future<List<Message>> fetchMessages(int chatId) async {
+  Future<List<Message>> fetchMessages(int chatId, {int? beforeId}) async {
     try {
-      final res = await _client.get('/apiMes/messenger/chats/$chatId/messages');
+      final queryParams = <String, dynamic>{};
+      if (beforeId != null) {
+        queryParams['before_id'] = beforeId;
+      }
+
+      final res = await _client.get(
+        '/apiMes/messenger/chats/$chatId/messages',
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
 
       if (res.statusCode == 200) {
         final data = res.data as Map<String, dynamic>;
@@ -153,6 +195,148 @@ class MessagesService {
       }
     } on DioException catch (e) {
       throw Exception('Не удалось отметить чат как прочитанный: ${e.response?.statusCode ?? 'Ошибка сети'}');
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Загружает медиа-файл (фото, видео) в чат
+  ///
+  /// Выполняет POST запрос для загрузки медиа-файла через multipart/form-data.
+  ///
+  /// [chatId] - ID чата, в который загружается файл
+  /// [filePath] - путь к файлу на устройстве
+  /// [messageType] - тип сообщения: 'photo' или 'video'
+  /// [replyToId] - ID сообщения, на которое отвечаем (опционально)
+  /// Returns: Объект Message с информацией о загруженном файле
+  /// Throws: Exception при ошибке загрузки
+  Future<Message> uploadMedia({
+    required int chatId,
+    required String filePath,
+    required String messageType, // 'photo' or 'video'
+    int? replyToId,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'message_type': messageType,
+        'file': await MultipartFile.fromFile(filePath),
+        if (replyToId != null) 'reply_to_id': replyToId,
+      });
+
+      final res = await _client.postFormData(
+        '/apiMes/messenger/chats/$chatId/upload',
+        formData,
+      );
+
+      if (res.statusCode == 200) {
+        final data = res.data as Map<String, dynamic>;
+        if (data['success'] == true && data['message'] != null) {
+          return Message.fromJson(data['message'] as Map<String, dynamic>);
+        } else {
+          throw Exception('Не удалось загрузить файл: ${data['message'] ?? 'Неизвестная ошибка'}');
+        }
+      } else {
+        throw Exception('Не удалось загрузить файл: ${res.statusCode}');
+      }
+    } on DioException catch (e) {
+      throw Exception('Не удалось загрузить файл: ${e.response?.statusCode ?? 'Ошибка сети'}');
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Загружает медиа-файл через Base64
+  ///
+  /// Выполняет POST запрос для загрузки медиа-файла через Base64 кодирование.
+  ///
+  /// [chatId] - ID чата, в который загружается файл
+  /// [type] - тип файла: 'photo', 'video', или 'audio'
+  /// [filename] - имя файла
+  /// [base64Data] - Base64-кодированные данные файла
+  /// [replyToId] - ID сообщения, на которое отвечаем (опционально)
+  /// Returns: Объект Message с информацией о загруженном файле
+  /// Throws: Exception при ошибке загрузки
+  Future<Message> uploadMediaBase64({
+    required int chatId,
+    required String type, // 'photo', 'video', or 'audio'
+    required String filename,
+    required String base64Data,
+    int? replyToId,
+  }) async {
+    try {
+      final res = await _client.post('/apiMes/messenger/chats/$chatId/base64upload', {
+        'type': type,
+        'filename': filename,
+        'data': base64Data,
+        if (replyToId != null) 'reply_to_id': replyToId,
+      });
+
+      if (res.statusCode == 200) {
+        final data = res.data as Map<String, dynamic>;
+        if (data['success'] == true && data['message'] != null) {
+          return Message.fromJson(data['message'] as Map<String, dynamic>);
+        } else {
+          throw Exception('Не удалось загрузить файл: ${data['message'] ?? 'Неизвестная ошибка'}');
+        }
+      } else {
+        throw Exception('Не удалось загрузить файл: ${res.statusCode}');
+      }
+    } on DioException catch (e) {
+      throw Exception('Не удалось загрузить файл: ${e.response?.statusCode ?? 'Ошибка сети'}');
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Редактирует сообщение
+  ///
+  /// Выполняет PUT запрос для редактирования сообщения.
+  /// Только текстовые сообщения могут быть отредактированы.
+  ///
+  /// [chatId] - ID чата
+  /// [messageId] - ID сообщения для редактирования
+  /// [content] - новый текст сообщения
+  /// Returns: Обновленное сообщение
+  /// Throws: Exception при ошибке редактирования
+  Future<Message> editMessage(int chatId, int messageId, String content) async {
+    try {
+      final res = await _client.put(
+        '/apiMes/messenger/chats/$chatId/messages/$messageId',
+        {'text': content},
+      );
+
+      if (res.statusCode == 200) {
+        final data = res.data as Map<String, dynamic>;
+        final messageData = data['message'] as Map<String, dynamic>;
+        return Message.fromJson(messageData);
+      } else {
+        throw Exception('Не удалось отредактировать сообщение: ${res.statusCode}');
+      }
+    } on DioException catch (e) {
+      throw Exception('Не удалось отредактировать сообщение: ${e.response?.statusCode ?? 'Ошибка сети'}');
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Удаляет сообщение
+  ///
+  /// Выполняет DELETE запрос для удаления сообщения.
+  ///
+  /// [chatId] - ID чата
+  /// [messageId] - ID сообщения для удаления
+  /// Throws: Exception при ошибке удаления
+  Future<void> deleteMessage(int chatId, int messageId) async {
+    try {
+      final res = await _client.delete(
+        '/apiMes/messenger/chats/$chatId/messages/$messageId',
+      );
+
+      if (res.statusCode != 200 && res.statusCode != 204) {
+        throw Exception('Не удалось удалить сообщение: ${res.statusCode}');
+      }
+    } on DioException catch (e) {
+      throw Exception('Не удалось удалить сообщение: ${e.response?.statusCode ?? 'Ошибка сети'}');
     } catch (e) {
       rethrow;
     }

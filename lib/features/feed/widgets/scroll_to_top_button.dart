@@ -4,7 +4,7 @@
 /// Использует эффект liquid glass для стильного внешнего вида.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
 /// Виджет кнопки для прокрутки к началу списка
@@ -32,12 +32,13 @@ class ScrollToTopButton extends StatelessWidget {
           ),
           child: LiquidGlass(
             shape: LiquidRoundedSuperellipse(borderRadius: 25),
-            child: CupertinoButton(
+            child: IconButton(
               padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
               onPressed: onPressed,
-              child: const Icon(
-                CupertinoIcons.up_arrow,
-                color: CupertinoColors.white,
+              icon: const Icon(
+                Icons.arrow_upward,
+                color: Colors.white,
                 size: 24,
               ),
             ),

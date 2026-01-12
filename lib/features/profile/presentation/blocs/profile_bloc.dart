@@ -336,18 +336,20 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   /// Helper method to load following info sequentially after posts are loaded
   Future<void> _loadFollowingInfoSequentially(String profileId, String username, bool isOwnProfile, Emitter<ProfileState> emit) async {
-    if (isOwnProfile || _currentUserDBId == null) {
-      debugPrint('ProfileBloc: Skipping following info - isOwnProfile=$isOwnProfile, currentUserDBId=$_currentUserDBId');
+    // Always load following info to get is_self from API, even for own profile
+    // This is needed because API might return is_self: true even when isOwnProfile is false
+    if (_currentUserDBId == null) {
+      debugPrint('ProfileBloc: Skipping following info - currentUserDBId is null');
       return;
     }
 
     try {
-      debugPrint('ProfileBloc: Loading following info sequentially for profileId=$profileId');
+      debugPrint('ProfileBloc: Loading following info sequentially for profileId=$profileId, isOwnProfile=$isOwnProfile');
       final followingInfo = await _repository.fetchFollowingInfoWithFollowers(
         profileId: profileId,
         currentUserId: _currentUserDBId!,
       );
-      debugPrint('ProfileBloc: Following info loaded successfully');
+      debugPrint('ProfileBloc: Following info loaded successfully, isSelf=${followingInfo.isSelf}');
 
       // Get latest state to preserve all data
       final currentState = state;
@@ -362,6 +364,19 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     } catch (e) {
       debugPrint('ProfileBloc: Failed to fetch following info: $e');
       // Don't emit error for following info - it's optional data
+      // But if it's own profile, we can create a FollowingInfo with isSelf=true as fallback
+      if (isOwnProfile) {
+        final currentState = state;
+        if (currentState is ProfileLoaded) {
+          final fallbackFollowingInfo = FollowingInfo(
+            currentUserFollows: false,
+            currentUserIsFriend: false,
+            followsBack: false,
+            isSelf: true,
+          );
+          emit(currentState.copyWith(followingInfo: fallbackFollowingInfo));
+        }
+      }
     }
   }
 
@@ -560,6 +575,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
             currentUserFollows: true,
             currentUserIsFriend: currentState.followingInfo!.currentUserIsFriend,
             followsBack: currentState.followingInfo!.followsBack,
+            isSelf: currentState.followingInfo!.isSelf,
           );
           emit(currentState.copyWith(followingInfo: updatedFollowingInfo));
         }
@@ -583,6 +599,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
             currentUserFollows: false,
             currentUserIsFriend: false, // Unfollowing also removes friendship
             followsBack: false,
+            isSelf: currentState.followingInfo!.isSelf,
           );
           emit(currentState.copyWith(followingInfo: updatedFollowingInfo));
         }

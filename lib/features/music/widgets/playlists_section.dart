@@ -4,10 +4,8 @@
 /// Поддерживает пагинацию и pull-to-refresh для обновления данных.
 library;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../theme/app_colors.dart';
 import '../../../core/utils/theme_extensions.dart';
 import '../../../theme/app_text_styles.dart';
 import '../domain/models/playlist.dart';
@@ -77,7 +75,7 @@ class _PlaylistsSectionState extends State<PlaylistsSection> {
     if (state.myPlaylistsStatus == MusicLoadStatus.loading && state.myPlaylists.isEmpty &&
         state.publicPlaylistsStatus == MusicLoadStatus.loading && state.publicPlaylists.isEmpty) {
       return Center(
-        child: const CupertinoActivityIndicator(),
+        child: const CircularProgressIndicator(),
       );
     }
 
@@ -87,25 +85,25 @@ class _PlaylistsSectionState extends State<PlaylistsSection> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              CupertinoIcons.exclamationmark_triangle,
+            Icon(
+              Icons.warning,
               size: 48,
-              color: AppColors.textSecondary,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
             Text(
               'Ошибка загрузки',
-              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary),
+              style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurface),
             ),
             const SizedBox(height: 8),
-            CupertinoButton(
+            TextButton(
               onPressed: () {
                 context.read<MusicBloc>().add(MusicMyPlaylistsFetched());
                 context.read<MusicBloc>().add(MusicPublicPlaylistsFetched());
               },
               child: Text(
                 'Повторить',
-                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primaryPurple),
+                style: AppTextStyles.bodyMedium.copyWith(color: context.dynamicPrimaryColor),
               ),
             ),
           ],
@@ -122,6 +120,10 @@ class _PlaylistsSectionState extends State<PlaylistsSection> {
       child: CustomScrollView(
         controller: _scrollController,
         slivers: [
+        // Отступ сверху под хедер
+        const SliverToBoxAdapter(
+          child: SizedBox(height: 46),
+        ),
         SliverToBoxAdapter(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -130,7 +132,7 @@ class _PlaylistsSectionState extends State<PlaylistsSection> {
               style: AppTextStyles.bodyMedium.copyWith(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
@@ -149,7 +151,7 @@ class _PlaylistsSectionState extends State<PlaylistsSection> {
                     return const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16),
                       child: Center(
-                        child: CupertinoActivityIndicator(),
+                        child: CircularProgressIndicator(),
                       ),
                     );
                   }
@@ -171,7 +173,7 @@ class _PlaylistsSectionState extends State<PlaylistsSection> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Text(
                 'У вас пока нет плейлистов',
-                style: AppTextStyles.bodySecondary.copyWith(color: AppColors.textPrimary),
+                style: AppTextStyles.bodySecondary.copyWith(color: Theme.of(context).colorScheme.onSurface),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -186,7 +188,7 @@ class _PlaylistsSectionState extends State<PlaylistsSection> {
                 style: AppTextStyles.bodyMedium.copyWith(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),
@@ -205,7 +207,7 @@ class _PlaylistsSectionState extends State<PlaylistsSection> {
                     return const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16),
                       child: Center(
-                        child: CupertinoActivityIndicator(),
+                        child: CircularProgressIndicator(),
                       ),
                     );
                   }
@@ -227,7 +229,7 @@ class _PlaylistsSectionState extends State<PlaylistsSection> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Text(
                 'Публичные плейлисты не найдены',
-                style: AppTextStyles.bodySecondary.copyWith(color: AppColors.textPrimary),
+                style: AppTextStyles.bodySecondary.copyWith(color: Theme.of(context).colorScheme.onSurface),
                 textAlign: TextAlign.center,
               ),
             ),

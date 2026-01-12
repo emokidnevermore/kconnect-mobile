@@ -5,17 +5,14 @@
 /// Поддерживает автоматическое обновление кэша при возобновлении работы приложения.
 library;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kconnect_mobile/injection.dart';
 import 'package:kconnect_mobile/theme/app_text_styles.dart';
-import 'package:kconnect_mobile/theme/app_colors.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_bloc.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_event.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_state.dart';
 
-import 'components/profile_header.dart';
 import 'components/profile_background.dart';
 import 'components/profile_content_card.dart';
 import 'components/profile_posts_section.dart';
@@ -108,7 +105,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> with AutomaticKeepAli
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
-                CupertinoButton(
+                TextButton(
                   onPressed: () async {
                     if (!mounted) return;
                     context.read<ProfileBloc>().add(LoadCurrentProfileEvent());
@@ -130,7 +127,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> with AutomaticKeepAli
           return _buildProfileView(profileState);
         }
 
-        return const Center(child: CupertinoActivityIndicator());
+        return const Center(child: CircularProgressIndicator());
       },
     )
     );
@@ -139,6 +136,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> with AutomaticKeepAli
   Widget _buildProfileView(ProfileLoaded profileState) {
     final profile = profileState.profile;
     final accentColor = ProfileColorUtils.getProfileAccentColor(profile, context);
+    final profileColorScheme = ProfileColorUtils.createProfileColorScheme(accentColor);
 
     final scrollView = ProfileAccentColorProvider(
       accentColor: accentColor,
@@ -149,10 +147,9 @@ class _MyProfileScreenState extends State<MyProfileScreen> with AutomaticKeepAli
         color: accentColor,
         child: CustomScrollView(
           slivers: [
-            ProfileHeader(
-              profile: profile,
-              accentColor: accentColor,
-              isSkeleton: profileState.isSkeleton,
+            // Отступ сверху под хедер
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 48),
             ),
             SliverToBoxAdapter(
               child: ProfileContentCard(
@@ -163,11 +160,15 @@ class _MyProfileScreenState extends State<MyProfileScreen> with AutomaticKeepAli
                 onEditPressed: _showEditProfileDialog,
                 onFollowPressed: () => context.read<ProfileBloc>().add(FollowUserEvent(profile.username)),
                 onUnfollowPressed: () => context.read<ProfileBloc>().add(UnfollowUserEvent(profile.username)),
+                hasProfileBackground: profile.profileBackgroundUrl != null && profile.profileBackgroundUrl!.isNotEmpty,
+                profileColorScheme: profileColorScheme,
               ),
             ),
             ProfilePostsSection(
               profileState: profileState,
               accentColor: accentColor,
+              hasProfileBackground: profile.profileBackgroundUrl != null && profile.profileBackgroundUrl!.isNotEmpty,
+              profileColorScheme: profileColorScheme,
             ),
             const SliverToBoxAdapter(
               child: SizedBox(height: 80),
@@ -178,17 +179,17 @@ class _MyProfileScreenState extends State<MyProfileScreen> with AutomaticKeepAli
     );
 
     final screenWidget = Container(
-      color: AppColors.bgDark.withValues(alpha:0.8),
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (profile.profileBackgroundUrl != null)
-            Padding(
-              padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-              child: ProfileBackground(
-                backgroundUrl: profile.profileBackgroundUrl,
-              ),
+          Padding(
+            padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+            child: ProfileBackground(
+              backgroundUrl: profile.profileBackgroundUrl,
+              profileColorScheme: profileColorScheme,
             ),
+          ),
           SafeArea(
             bottom: true,
             child: scrollView,
@@ -200,19 +201,19 @@ class _MyProfileScreenState extends State<MyProfileScreen> with AutomaticKeepAli
     return screenWidget;
   }
 
-  VoidCallback get _showEditProfileDialog => () => showCupertinoDialog(
+  VoidCallback get _showEditProfileDialog => () => showDialog(
         // TODO: Реализовать диалог редактирования профиля
         context: context,
-        builder: (context) => CupertinoAlertDialog(
+        builder: (context) => AlertDialog(
+          backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('Редактирование профиля'),
           content: const Text('Эта функция будет реализована в следующей версии'),
           actions: [
-            CupertinoDialogAction(
-              child: const Text('OK'),
+            TextButton(
               onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
             ),
           ],
         ),
       );
-
 }

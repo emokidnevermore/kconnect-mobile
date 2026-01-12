@@ -1,13 +1,12 @@
 /// BLoC для управления воспроизведением музыки
-///
-/// Управляет состоянием аудио-плеера, включая воспроизведение, паузу,
-/// перемотку, и интеграцию с очередью воспроизведения.
-/// Синхронизируется с AudioRepository для отслеживания состояния.
+/// Простой слушатель AudioService - трансформирует состояние в доменную модель
 library;
 
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
-import 'dart:developer' as developer;
+import 'package:audio_service/audio_service.dart' hide PlaybackState;
+import 'package:audio_service/audio_service.dart' as audio_service show PlaybackState;
 import '../../domain/repositories/audio_repository.dart';
 import '../../domain/usecases/play_track_usecase.dart';
 import '../../domain/usecases/pause_usecase.dart';
@@ -15,20 +14,20 @@ import '../../domain/usecases/seek_usecase.dart';
 import '../../domain/usecases/resume_usecase.dart';
 import '../../domain/models/playback_state.dart';
 import '../../domain/models/track.dart';
+import '../../../../services/audio_service_manager.dart';
 
 part 'playback_event.dart';
 
-/// BLoC класс для управления воспроизведением музыки
-///
-/// Обрабатывает все операции воспроизведения: начало трека, паузу, возобновление,
-/// перемотку, и реагирует на завершение треков для автоматического перехода к следующему.
-/// Поддерживает различные режимы воспроизведения и интеграцию с очередью.
+/// BLoC - просто слушает AudioService и эмитит состояние
 class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
   final AudioRepository _audioRepository;
   final PlayTrackUseCase _playTrackUseCase;
   final PauseUseCase _pauseUseCase;
   final SeekUseCase _seekUseCase;
   final ResumeUseCase _resumeUseCase;
+  
+  StreamSubscription<audio_service.PlaybackState>? _audioServiceSubscription;
+  StreamSubscription<MediaItem?>? _mediaItemSubscription;
 
   PlaybackBloc({
     required AudioRepository audioRepository,
@@ -41,8 +40,7 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
        _pauseUseCase = pauseUseCase,
        _seekUseCase = seekUseCase,
        _resumeUseCase = resumeUseCase,
-       super(audioRepository.currentState) {
-    on<PlaybackInitialized>(_onInitialized);
+       super(const PlaybackState()) {
     on<PlaybackPlayRequested>(_onPlayRequested);
     on<PlaybackPauseRequested>(_onPauseRequested);
     on<PlaybackResumeRequested>(_onResumeRequested);
@@ -52,37 +50,147 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
     on<PlaybackStateUpdated>(_onStateUpdated);
     on<PlaybackQueueChanged>(_onQueueChanged);
 
-    _audioRepository.playbackState.listen((audioState) {
-      add(PlaybackStateUpdated(audioState));
-    });
+    _setupAudioServiceSubscription();
+  }
+  
+  void _setupAudioServiceSubscription() {
+    if (!AudioServiceManager.isServiceReady()) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _setupAudioServiceSubscription();
+      });
+      return;
+    }
+
+    final handler = AudioServiceManager.getHandler();
+    if (handler != null) {
+      // Подписка на playbackState
+      _audioServiceSubscription = handler.playbackState.listen(
+        (audioState) {
+          final newState = _createStateFromAudioService(audioState);
+          add(PlaybackStateUpdated(newState));
+        },
+      );
+
+      // Подписка на mediaItem
+      _mediaItemSubscription = handler.mediaItem.listen(
+        (mediaItem) {
+          if (mediaItem == null) {
+            if (state.hasTrack) {
+              add(PlaybackStateUpdated(const PlaybackState()));
+            }
+          } else {
+            final newState = _createStateFromMediaItem(mediaItem);
+            add(PlaybackStateUpdated(newState));
+          }
+        },
+      );
+
+      // Синхронизация начального состояния
+      final initialPlaybackState = handler.playbackState.valueOrNull;
+      if (initialPlaybackState != null) {
+        add(PlaybackStateUpdated(_createStateFromAudioService(initialPlaybackState)));
+      }
+      final initialMediaItem = handler.mediaItem.valueOrNull;
+      if (initialMediaItem != null) {
+        add(PlaybackStateUpdated(_createStateFromMediaItem(initialMediaItem)));
+      }
+    }
   }
 
-  /// Обработчик инициализации воспроизведения
-  ///
-  /// Устанавливает начальное состояние из аудио-репозитория.
-  /// Вызывается при первом запуске BLoC.
-  void _onInitialized(PlaybackInitialized event, Emitter<PlaybackState> emit) {
-    emit(_audioRepository.currentState);
+  PlaybackState _createStateFromAudioService(audio_service.PlaybackState audioState) {
+    final handler = AudioServiceManager.getHandler();
+    final mediaItem = handler?.mediaItem.valueOrNull;
+    if (mediaItem == null) {
+      return const PlaybackState();
+    }
+
+    final track = _trackFromMediaItem(mediaItem);
+    if (track == null) {
+      return const PlaybackState();
+    }
+
+    final status = _mapStatus(audioState);
+
+    return PlaybackState(
+      currentTrack: track,
+      status: status,
+      position: audioState.position,
+      duration: mediaItem.duration,
+      isBuffering: audioState.processingState == AudioProcessingState.buffering,
+      lastUpdated: DateTime.now(),
+    );
   }
 
-  /// Обработчик запроса на воспроизведение трека
-  ///
-  /// Начинает воспроизведение указанного трека.
-  /// Устанавливает состояние буферизации и обновляет текущий трек.
-  /// Обрабатывает ошибки воспроизведения и логирует их.
+  PlaybackState _createStateFromMediaItem(MediaItem mediaItem) {
+    final track = _trackFromMediaItem(mediaItem);
+    if (track == null) {
+      return const PlaybackState();
+    }
+
+    final handler = AudioServiceManager.getHandler();
+    final audioState = handler?.playbackState.valueOrNull;
+
+    if (audioState == null) {
+      return PlaybackState(
+        currentTrack: track,
+        duration: mediaItem.duration,
+        position: state.position,
+        status: state.status,
+        isBuffering: state.isBuffering,
+        lastUpdated: DateTime.now(),
+      );
+    }
+
+    final status = _mapStatus(audioState);
+
+    return PlaybackState(
+      currentTrack: track,
+      status: status,
+      position: audioState.position,
+      duration: mediaItem.duration,
+      isBuffering: audioState.processingState == AudioProcessingState.buffering,
+      lastUpdated: DateTime.now(),
+    );
+  }
+
+  Track? _trackFromMediaItem(MediaItem mediaItem) {
+    final trackId = mediaItem.extras?['trackId'] as int?;
+    if (trackId == null) return null;
+    
+    return Track(
+      id: trackId,
+      title: mediaItem.title,
+      artist: mediaItem.artist ?? '',
+      durationMs: mediaItem.duration?.inMilliseconds ?? 0,
+      coverPath: mediaItem.extras?['coverPath'] as String?,
+      filePath: mediaItem.extras?['originalUrl'] as String? ?? mediaItem.id,
+      isLiked: mediaItem.extras?['isLiked'] as bool? ?? false,
+    );
+  }
+
+  PlaybackStatus _mapStatus(audio_service.PlaybackState audioState) {
+    if (audioState.playing) {
+      return PlaybackStatus.playing;
+    }
+    switch (audioState.processingState) {
+      case AudioProcessingState.buffering:
+        return PlaybackStatus.buffering;
+      case AudioProcessingState.ready:
+        return PlaybackStatus.paused;
+      default:
+        return PlaybackStatus.stopped;
+    }
+  }
+
   void _onPlayRequested(PlaybackPlayRequested event, Emitter<PlaybackState> emit) async {
-    developer.log('PlaybackBloc: Play requested for ${event.track.title}', name: 'PLAYBACK');
-
     try {
       emit(state.copyWith(
         currentTrack: event.track,
         status: PlaybackStatus.buffering,
         error: null,
       ));
-
       await _playTrackUseCase.call(event.track);
-    } catch (e, stackTrace) {
-      developer.log('PlaybackBloc: Error during playback', name: 'PLAYBACK', error: e, stackTrace: stackTrace);
+    } catch (e) {
       emit(state.copyWith(
         status: PlaybackStatus.stopped,
         error: e.toString(),
@@ -90,10 +198,6 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
     }
   }
 
-  /// Обработчик запроса на паузу
-  ///
-  /// Приостанавливает текущее воспроизведение.
-  /// Обрабатывает ошибки и обновляет состояние при необходимости.
   void _onPauseRequested(PlaybackPauseRequested event, Emitter<PlaybackState> emit) async {
     try {
       await _pauseUseCase.call();
@@ -102,22 +206,14 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
     }
   }
 
-  /// Обработчик запроса на возобновление воспроизведения
-  ///
-  /// Продолжает воспроизведение после паузы.
-  /// Обрабатывает ошибки возобновления.
   void _onResumeRequested(PlaybackResumeRequested event, Emitter<PlaybackState> emit) async {
     try {
-        await _resumeUseCase.call();
+      await _resumeUseCase.call();
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
     }
   }
 
-  /// Обработчик запроса на остановку воспроизведения
-  ///
-  /// Полностью останавливает воспроизведение и очищает текущий трек.
-  /// Обрабатывает ошибки остановки.
   void _onStopRequested(PlaybackStopRequested event, Emitter<PlaybackState> emit) async {
     try {
       await _audioRepository.stop();
@@ -126,10 +222,6 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
     }
   }
 
-  /// Обработчик запроса на перемотку
-  ///
-  /// Перематывает воспроизведение на указанную позицию.
-  /// Обрабатывает ошибки перемотки.
   void _onSeekRequested(PlaybackSeekRequested event, Emitter<PlaybackState> emit) async {
     try {
       await _seekUseCase.call(event.position);
@@ -138,62 +230,31 @@ class PlaybackBloc extends Bloc<PlaybackEvent, PlaybackState> {
     }
   }
 
-  /// Обработчик запроса на переключение воспроизведения
-  ///
-  /// Переключает между воспроизведением и паузой в зависимости от текущего состояния.
-  /// Если трек воспроизводится - ставит на паузу, иначе возобновляет.
   void _onToggleRequested(PlaybackToggleRequested event, Emitter<PlaybackState> emit) async {
-    final isActuallyPlaying = _audioRepository.isPlaying;
-    if (isActuallyPlaying) {
+    if (!state.hasTrack) return;
+    
+    if (state.isPlaying) {
       await _pauseUseCase.call();
-    } else if (state.hasTrack) {
+    } else {
       await _resumeUseCase.call();
     }
   }
 
-  /// Обработчик обновления состояния воспроизведения
-  ///
-  /// Принимает новое состояние от аудио-репозитория.
-  /// Логирует завершение треков для отладки.
   void _onStateUpdated(PlaybackStateUpdated event, Emitter<PlaybackState> emit) {
     if (event.newState.error == 'COMPLETED' && event.newState.currentTrack != null) {
-      developer.log('PlaybackBloc: Track completed, should trigger next track', name: 'PLAYBACK');
+      // Трек завершен - можно перейти к следующему
     }
-
-    emit(event.newState);
+    emit(event.newState.copyWith(lastUpdated: DateTime.now()));
   }
 
-  /// Обработчик изменения очереди воспроизведения
-  ///
-  /// Вызывается когда очередь треков изменилась.
-  /// Начинает воспроизведение нового текущего трека.
   void _onQueueChanged(PlaybackQueueChanged event, Emitter<PlaybackState> emit) {
     add(PlaybackPlayRequested(event.currentTrack));
   }
 
-  /// Текущее состояние воспроизведения
-  PlaybackState get currentPlaybackState => _audioRepository.currentState;
-
-  /// Поток состояний воспроизведения для подписки
-  Stream<PlaybackState> get playbackStateStream => _audioRepository.playbackState;
-
-  /// Флаг активного воспроизведения
-  bool get isPlaying => _audioRepository.isPlaying;
-
-  /// Флаг состояния буферизации
-  bool get isBuffering => _audioRepository.isBuffering;
-
-  /// Текущая позиция воспроизведения
-  Duration get position => _audioRepository.position;
-
-  /// Общая продолжительность текущего трека
-  Duration? get duration => _audioRepository.duration;
-
-  /// Освобождает ресурсы BLoC
-  ///
-  /// Вызывается при уничтожении BLoC для корректной очистки ресурсов.
-  /// Освобождает ресурсы аудио-репозитория.
-  void dispose() {
-    _audioRepository.dispose();
+  @override
+  Future<void> close() {
+    _audioServiceSubscription?.cancel();
+    _mediaItemSubscription?.cancel();
+    return super.close();
   }
 }

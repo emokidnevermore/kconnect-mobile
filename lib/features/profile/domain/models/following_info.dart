@@ -6,11 +6,13 @@ class FollowingInfo {
   final bool currentUserFollows;
   final bool currentUserIsFriend;
   final bool followsBack;
+  final bool isSelf;
 
   const FollowingInfo({
     required this.currentUserFollows,
     required this.currentUserIsFriend,
     required this.followsBack,
+    this.isSelf = false,
   });
 
   factory FollowingInfo.fromJson(Map<String, dynamic> json) {
@@ -18,6 +20,7 @@ class FollowingInfo {
       currentUserFollows: json['current_user_follows'] ?? false,
       currentUserIsFriend: json['is_friend'] ?? false,
       followsBack: true, // When this entry is found, it means profile follows current user
+      isSelf: json['is_self'] ?? false,
     );
   }
 
@@ -26,6 +29,7 @@ class FollowingInfo {
       'current_user_follows': currentUserFollows,
       'current_user_is_friend': currentUserIsFriend,
       'follows_back': followsBack,
+      'is_self': isSelf,
     };
   }
 }

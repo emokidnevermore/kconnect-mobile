@@ -1,3 +1,4 @@
+import 'package:equatable/equatable.dart';
 import 'package:kconnect_mobile/features/messages/domain/models/chat_member.dart';
 import 'package:kconnect_mobile/features/messages/domain/models/message.dart';
 
@@ -14,7 +15,7 @@ enum ChatType {
 ///
 /// Представляет чат с информацией об участниках, сообщениях и настройках.
 /// Поддерживает как личные, так и групповые чаты.
-class Chat {
+class Chat extends Equatable {
   final int id;
   final ChatType chatType;
   final String title;
@@ -114,4 +115,19 @@ class Chat {
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  @override
+  List<Object?> get props => [
+        id,
+        chatType,
+        title,
+        avatar,
+        isEncrypted,
+        isGroup,
+        lastMessage,
+        members,
+        unreadCount,
+        createdAt,
+        updatedAt,
+      ];
 }

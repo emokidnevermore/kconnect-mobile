@@ -249,7 +249,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     try {
       debugPrint('AuthBloc: Clearing user data for new account');
-      _dataClearService.clearUserDataForAccountSwitch();
+      await _dataClearService.clearUserDataForAccountSwitch();
 
       if (newAccount.sessionKey != null) {
         await _dioClient.saveSession(newAccount.sessionKey!);
@@ -260,7 +260,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _updateProfileColor(newAccount);
 
       debugPrint('AuthBloc: Triggering data reload for all features...');
-      _dataClearService.clearUserDataForAccountSwitch();
+      await _dataClearService.clearUserDataForAccountSwitch();
 
       debugPrint('AuthBloc: Restarting app to fully reload UI with new account data...');
       WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -53,6 +53,7 @@ class PostCreationState {
   final MediaType? selectedMediaType;
   final AudioSource audioSource;
   final bool isKeyboardVisible;
+  final bool showPollForm;
 
   const PostCreationState({
     this.status = PostCreationStatus.initial,
@@ -62,6 +63,7 @@ class PostCreationState {
     this.selectedMediaType,
     this.audioSource = AudioSource.favorites,
     this.isKeyboardVisible = false,
+    this.showPollForm = false,
   });
 
   /// Начальное состояние
@@ -85,6 +87,7 @@ class PostCreationState {
     MediaType? selectedMediaType,
     AudioSource? audioSource,
     bool? isKeyboardVisible,
+    bool? showPollForm,
   }) {
     return PostCreationState(
       status: status ?? this.status,
@@ -94,16 +97,34 @@ class PostCreationState {
       selectedMediaType: selectedMediaType ?? this.selectedMediaType,
       audioSource: audioSource ?? this.audioSource,
       isKeyboardVisible: isKeyboardVisible ?? this.isKeyboardVisible,
+      showPollForm: showPollForm ?? this.showPollForm,
     );
   }
 
   /// Проверка, можно ли опубликовать пост
-  bool get canPublish => draftPost.isReadyToPublish && status != PostCreationStatus.publishing;
+  bool get canPublish => draftPost.isReadyToPublish && _isPollValid && status != PostCreationStatus.publishing;
+
+  /// Проверка валидности опроса (если он включен)
+  bool get _isPollValid {
+    if (!showPollForm) return true; // Если форма не показана, то опрос валиден
+
+    final poll = draftPost;
+    if (poll.pollQuestion == null || poll.pollQuestion!.trim().isEmpty) return false;
+    if (poll.pollOptions.length < 2) return false;
+
+    // Проверяем, что все варианты ответов не пустые
+    for (final option in poll.pollOptions) {
+      if (option.trim().isEmpty) return false;
+    }
+
+    return true;
+  }
 
   /// Проверка, есть ли несохраненные изменения
   bool get hasUnsavedChanges =>
       draftPost.content.isNotEmpty ||
       draftPost.imagePaths.isNotEmpty ||
       draftPost.videoPath != null ||
-      draftPost.audioTrackIds.isNotEmpty;
+      draftPost.audioTrackIds.isNotEmpty ||
+      draftPost.pollQuestion != null;
 }

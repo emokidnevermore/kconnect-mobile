@@ -11,8 +11,9 @@ import '../features/messages/presentation/blocs/messages_bloc.dart';
 import '../features/messages/presentation/blocs/messages_event.dart';
 import '../features/profile/presentation/blocs/profile_event.dart';
 import '../features/profile/presentation/blocs/profile_bloc.dart';
-import '../core/utils/cache_utils.dart';
 import '../services/storage_service.dart';
+import '../services/cache/global_cache_service.dart';
+import '../services/cache/cache_category.dart';
 
 /// Сервис очистки пользовательских данных
 class DataClearService {
@@ -20,7 +21,7 @@ class DataClearService {
 
   /// Очищает все кэшированные пользовательские данные из BLoC состояний
   /// Должен вызываться во время процесса выхода из аккаунта
-  void clearAllUserData() {
+  Future<void> clearAllUserData() async {
     final feedBloc = locator.get<FeedBloc>();
     final messagesBloc = locator.get<MessagesBloc>();
     final profileBloc = locator.get<ProfileBloc>();
@@ -30,14 +31,17 @@ class DataClearService {
     messagesBloc.add(InitMessagesEvent());
 
     profileBloc.add(ClearProfileCacheEvent());
-    CacheUtils.clearImageCache();
+    
+    // Используем GlobalCacheService для очистки кэша изображений
+    final cacheService = GlobalCacheService();
+    await cacheService.clearCache([CacheCategory.images]);
 
     StorageService.clearPersonalizationSettings();
   }
 
   /// Очищает кэш при переключении аккаунтов (исключая персонализацию)
   /// Должно вызываться во время смены аккаунта
-  void clearUserDataForAccountSwitch() {
+  Future<void> clearUserDataForAccountSwitch() async {
     final feedBloc = locator.get<FeedBloc>();
     final messagesBloc = locator.get<MessagesBloc>();
     final profileBloc = locator.get<ProfileBloc>();
@@ -48,6 +52,8 @@ class DataClearService {
 
     profileBloc.add(ClearProfileCacheEvent());
 
-    CacheUtils.clearImageCache();
+    // Используем GlobalCacheService для очистки кэша изображений
+    final cacheService = GlobalCacheService();
+    await cacheService.clearCache([CacheCategory.images]);
   }
 }

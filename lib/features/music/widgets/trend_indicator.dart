@@ -4,7 +4,7 @@
 /// Поддерживает цветовую индикацию: зеленый для роста, красный для падения.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../../../theme/app_text_styles.dart';
 
 /// Виджет для отображения тренда трека
@@ -37,7 +37,7 @@ class TrendIndicator extends StatelessWidget {
 
     final isUp = trend == 'up';
     final color = isUp ? const Color(0xFF4CAF50) : const Color(0xFFF44336); // Green for up, red for down
-    final icon = isUp ? CupertinoIcons.arrow_up : CupertinoIcons.arrow_down;
+    final icon = isUp ? Icons.arrow_upward : Icons.arrow_downward;
 
     return Container(
       width: size ?? iconSize + 4,

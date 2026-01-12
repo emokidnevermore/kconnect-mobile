@@ -6,7 +6,7 @@
 library;
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../../../services/api_client/dio_client.dart';
 import '../utils/image_utils.dart';
 
@@ -80,11 +80,11 @@ class AuthorizedCachedNetworkImage extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             final placeholderWidget = placeholder != null
                 ? placeholder!(context, imageUrl)
-                : const CupertinoActivityIndicator(radius: 10);
+                : const CircularProgressIndicator(strokeWidth: 2);
             return Container(
               width: width,
               height: height,
-              color: CupertinoColors.systemGrey6,
+              color: Colors.grey.shade300,
               child: placeholderWidget,
             );
           }
@@ -105,10 +105,10 @@ class AuthorizedCachedNetworkImage extends StatelessWidget {
                 (context, url, error) => Container(
                   width: width,
                   height: height,
-                  color: CupertinoColors.systemGrey6,
+                  color: Colors.grey.shade300,
                   child: const Icon(
-                    CupertinoIcons.exclamationmark_triangle,
-                    color: CupertinoColors.systemGrey,
+                    Icons.warning,
+                    color: Colors.grey,
                   ),
                 ),
             useOldImageOnUrlChange: useOldImageOnUrlChange,
@@ -130,10 +130,10 @@ class AuthorizedCachedNetworkImage extends StatelessWidget {
             (context, url, error) => Container(
               width: width,
               height: height,
-              color: CupertinoColors.systemGrey6,
+              color: Colors.grey.shade300,
               child: const Icon(
-                CupertinoIcons.exclamationmark_triangle,
-                color: CupertinoColors.systemGrey,
+                Icons.warning,
+                color: Colors.grey,
               ),
             ),
         useOldImageOnUrlChange: useOldImageOnUrlChange,

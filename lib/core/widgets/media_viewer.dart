@@ -7,10 +7,12 @@ library;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chewie/chewie.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:video_player/video_player.dart';
+import '../../services/cache/video_cache_service.dart';
 import '../../theme/app_text_styles.dart';
 import '../media_item.dart';
 
@@ -24,12 +26,24 @@ class MediaViewer extends StatefulWidget {
 
   /// Индекс начального элемента для отображения
   final int initialIndex;
+  
+  /// Префикс для Hero тегов (для различения постов в ленте и профиле)
+  final String? heroTagPrefix;
+  
+  /// ID поста для уникальности Hero тегов (необходимо для предотвращения дубликатов)
+  final int? postId;
+  
+  /// Индекс поста в ленте для уникальности Hero тегов (необходимо для предотвращения дубликатов)
+  final int? feedIndex;
 
   /// Конструктор просмотрщика медиа
   const MediaViewer({
     super.key,
     required this.items,
     this.initialIndex = 0,
+    this.heroTagPrefix,
+    this.postId,
+    this.feedIndex,
   });
 
   @override
@@ -71,14 +85,37 @@ class _MediaViewerState extends State<MediaViewer> {
   /// Инициализация видео-контроллера для указанного индекса
   ///
   /// Создает VideoPlayerController и ChewieController для видео.
+  /// Использует кэшированные видео файлы для постоянного хранения.
+  /// При ошибке кэширования использует прямое воспроизведение из сети.
   /// Обрабатывает ошибки загрузки и помечает неудачные загрузки.
   void _initializeVideo(int index) async {
     if (!_videoControllers.containsKey(index) && widget.items[index].isVideo) {
       final item = widget.items[index];
 
       try {
-        final uri = Uri.parse(item.url);
-        final videoController = VideoPlayerController.networkUrl(uri);
+        VideoPlayerController videoController;
+        
+        // Пытаемся использовать кэшированный файл
+        try {
+          final videoCacheService = VideoCacheService.instance;
+          final cachedFile = await videoCacheService.getCachedVideoFile(item.url);
+          
+          // Проверяем, что файл существует и не пустой
+          if (await cachedFile.exists() && await cachedFile.length() > 0) {
+            // Используем кэшированный файл
+            videoController = VideoPlayerController.file(cachedFile);
+          } else {
+            // Файл не существует или пустой - используем прямое воспроизведение
+            videoController = VideoPlayerController.networkUrl(Uri.parse(item.url));
+          }
+        } catch (cacheError) {
+          // Ошибка кэширования - используем прямое воспроизведение из сети
+          if (kDebugMode) {
+            debugPrint('MediaViewer: Video cache error for ${item.url}: $cacheError');
+          }
+          videoController = VideoPlayerController.networkUrl(Uri.parse(item.url));
+        }
+        
         _videoControllers[index] = videoController;
 
         await videoController.initialize();
@@ -91,10 +128,10 @@ class _MediaViewerState extends State<MediaViewer> {
             showControls: true,
             aspectRatio: videoController.value.aspectRatio,
             placeholder: const SizedBox.shrink(),
-            errorBuilder: (_, _) => const Center(
+            errorBuilder: (context, _) => Center(
               child: Icon(
-                CupertinoIcons.exclamationmark_triangle,
-                color: CupertinoColors.systemGrey,
+                Icons.warning,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 size: 48,
               ),
             ),
@@ -102,7 +139,11 @@ class _MediaViewerState extends State<MediaViewer> {
           _chewieControllers[index] = chewieController;
           setState(() {});
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
+        if (kDebugMode) {
+          debugPrint('MediaViewer: Error initializing video at index $index: $e');
+          debugPrint('MediaViewer: Stack trace: $stackTrace');
+        }
         if (mounted) {
           _failedVideoIndices.add(index);
           setState(() {});
@@ -147,19 +188,33 @@ class _MediaViewerState extends State<MediaViewer> {
   Widget _buildVideoItem(MediaItem item, int index) {
     if (_failedVideoIndices.contains(index)) {
       // Не удалось загрузить видео
-      return const Center(
-        child: Icon(
-          CupertinoIcons.exclamationmark_triangle,
-          color: CupertinoColors.systemGrey,
-          size: 48,
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.warning,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Ошибка загрузки видео',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ),
       );
     }
 
     final chewieController = _chewieControllers[index];
-    if (chewieController != null) {
-      return Chewie(controller: chewieController);
-    } else {
+    final videoController = _videoControllers[index];
+    
+    // Проверяем, инициализируется ли видео
+    if (videoController != null && !videoController.value.isInitialized) {
+      // Видео загружается
       return Stack(
         fit: StackFit.expand,
         children: [
@@ -168,16 +223,48 @@ class _MediaViewerState extends State<MediaViewer> {
               imageUrl: item.posterUrl!,
               fit: BoxFit.contain,
               placeholder: (_, _) => const Center(
-                child: CupertinoActivityIndicator(),
+                child: CircularProgressIndicator(),
               ),
               errorWidget: (_, _, _) => Container(
-                color: CupertinoColors.black,
+                color: Colors.black,
               ),
             ),
           if (item.posterUrl == null)
-            const Center(
-              child: CupertinoActivityIndicator(),
+            Container(
+              color: Colors.black,
             ),
+          const Center(
+            child: CircularProgressIndicator(),
+          ),
+        ],
+      );
+    }
+    
+    if (chewieController != null && videoController?.value.isInitialized == true) {
+      return Chewie(controller: chewieController);
+    } else {
+      // Видео еще не инициализировано - показываем постер и индикатор загрузки
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          if (item.posterUrl != null)
+            CachedNetworkImage(
+              imageUrl: item.posterUrl!,
+              fit: BoxFit.contain,
+              placeholder: (_, _) => const Center(
+                child: CircularProgressIndicator(),
+              ),
+              errorWidget: (_, _, _) => Container(
+                color: Colors.black,
+              ),
+            ),
+          if (item.posterUrl == null)
+            Container(
+              color: Colors.black,
+            ),
+          const Center(
+            child: CircularProgressIndicator(),
+          ),
         ],
       );
     }
@@ -192,7 +279,7 @@ class _MediaViewerState extends State<MediaViewer> {
     final item = widget.items[_currentIndex];
 
     return Container(
-      color: CupertinoColors.black,
+      color: Colors.black,
       child: SafeArea(
         child: Stack(
           fit: StackFit.expand,
@@ -205,57 +292,91 @@ class _MediaViewerState extends State<MediaViewer> {
                 final mediaItem = widget.items[index];
 
                 if (mediaItem.isImage) {
+                  // Hero tag для анимации
+                  // Используем heroTagPrefix если передан, иначе определяем автоматически
+                  final isProfileAvatar = mediaItem.url.contains('/avatar/');
+                  final prefix = widget.heroTagPrefix ?? (isProfileAvatar ? 'profile_avatar' : 'post_media');
+                  // Используем postId и feedIndex для уникальности, если они доступны
+                  final postIdSuffix = widget.postId != null ? '_${widget.postId}' : '';
+                  final feedIndexSuffix = widget.feedIndex != null ? '_feed${widget.feedIndex}' : '';
+                  final heroTag = '${prefix}_${mediaItem.url.hashCode}_$index$postIdSuffix$feedIndexSuffix';
+                  
                   // Пользовательская обработка изображений с резервом при ошибке
                   return PhotoViewGalleryPageOptions.customChild(
-                    child: CachedNetworkImage(
-                      imageUrl: mediaItem.url,
-                      fit: BoxFit.contain,
-                      placeholder: (context, url) => const Center(
-                        child: CupertinoActivityIndicator(),
-                      ),
-                      errorWidget: (context, url, error) {
-                        // Проверяем, является ли это ошибкой 403 или другой, показываем плейсхолдер аватара
-                        if (mediaItem.url.contains('/avatar/')) {
-                          return CachedNetworkImage(
-                            imageUrl: 'https://k-connect.ru/static/uploads/system/album_placeholder.jpg',
-                            fit: BoxFit.contain,
-                            placeholder: (context, url) => const Center(
-                              child: CupertinoActivityIndicator(),
-                            ),
-                            errorWidget: (context, url, error) => Container(
-                              color: CupertinoColors.black,
-                              child: const Center(
-                                child: Icon(
-                                  CupertinoIcons.photo,
-                                  color: CupertinoColors.systemGrey,
-                                  size: 48,
+                    child: Hero(
+                      tag: heroTag,
+                      transitionOnUserGestures: true,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: CachedNetworkImage(
+                          imageUrl: mediaItem.url,
+                          fit: BoxFit.contain,
+                          placeholder: (context, url) => const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                          errorWidget: (context, url, error) {
+                            // Проверяем, является ли это ошибкой 403 или другой, показываем плейсхолдер аватара
+                            if (mediaItem.url.contains('/avatar/')) {
+                              return CachedNetworkImage(
+                                imageUrl: 'https://k-connect.ru/static/uploads/system/album_placeholder.jpg',
+                                fit: BoxFit.contain,
+                                placeholder: (context, url) => const Center(
+                                  child: CircularProgressIndicator(),
                                 ),
-                              ),
-                            ),
-                          );
-                        } else {
-                          // Для других ошибок изображений показываем общую ошибку
-                          return Container(
-                            color: CupertinoColors.black,
-                            child: const Center(
-                              child: Icon(
-                                CupertinoIcons.photo,
-                                color: CupertinoColors.systemGrey,
-                                size: 48,
-                              ),
-                            ),
-                          );
-                        }
-                      },
+                                errorWidget: (context, url, error) => Container(
+                                  color: Colors.black,
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.photo,
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      size: 48,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            } else {
+                              // Для других ошибок изображений показываем общую ошибку
+                              return Container(
+                                color: Colors.black,
+                                child: Center(
+                                  child: Icon(
+                                    Icons.photo,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    size: 48,
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ),
                     ),
                     minScale: PhotoViewComputedScale.contained,
                     maxScale: PhotoViewComputedScale.covered * 4.0,
                     initialScale: PhotoViewComputedScale.contained,
                   );
                 } else {
-                  // Пользовательский дочерний элемент для видео
+                  // Для видео используем Hero тег на основе posterUrl (если есть) или URL
+                  // Это важно для совпадения с Hero тегом в PostMedia
+                  final heroUrl = mediaItem.posterUrl ?? mediaItem.url;
+                  // Используем heroTagPrefix если передан, иначе определяем автоматически
+                  final isProfileAvatar = heroUrl.contains('/avatar/');
+                  final prefix = widget.heroTagPrefix ?? (isProfileAvatar ? 'profile_avatar' : 'post_media');
+                  // Используем postId и feedIndex для уникальности, если они доступны
+                  final postIdSuffix = widget.postId != null ? '_${widget.postId}' : '';
+                  final feedIndexSuffix = widget.feedIndex != null ? '_feed${widget.feedIndex}' : '';
+                  final heroTag = '${prefix}_${heroUrl.hashCode}_$index$postIdSuffix$feedIndexSuffix';
+                  
+                  // Пользовательский дочерний элемент для видео с Hero анимацией
                   return PhotoViewGalleryPageOptions.customChild(
-                    child: _buildVideoItem(mediaItem, index),
+                    child: Hero(
+                      tag: heroTag,
+                      transitionOnUserGestures: true,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: _buildVideoItem(mediaItem, index),
+                      ),
+                    ),
                     minScale: PhotoViewComputedScale.contained,
                     maxScale: PhotoViewComputedScale.contained,
                     initialScale: PhotoViewComputedScale.contained,
@@ -265,10 +386,10 @@ class _MediaViewerState extends State<MediaViewer> {
               onPageChanged: _onPageChanged,
               scrollPhysics: const BouncingScrollPhysics(),
               backgroundDecoration: const BoxDecoration(
-                color: CupertinoColors.black,
+                color: Colors.black,
               ),
               loadingBuilder: (context, event) => const Center(
-                child: CupertinoActivityIndicator(),
+                child: CircularProgressIndicator(),
               ),
             ),
 
@@ -276,19 +397,20 @@ class _MediaViewerState extends State<MediaViewer> {
             Positioned(
               top: 20,
               left: 16,
-              child: CupertinoButton(
+              child: IconButton(
                 padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
                 onPressed: () => Navigator.of(context).pop(),
-                child: Container(
+                icon: Container(
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: CupertinoColors.black.withAlpha(128),
+                    color: Colors.black.withAlpha(128),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
-                    CupertinoIcons.back,
-                    color: CupertinoColors.white,
+                    Icons.arrow_back,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -303,13 +425,13 @@ class _MediaViewerState extends State<MediaViewer> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: CupertinoColors.black.withAlpha(128),
+                    color: Colors.black.withAlpha(128),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
                     '${_currentIndex + 1} / ${widget.items.length}',
                     style: AppTextStyles.bodySecondary.copyWith(
-                      color: CupertinoColors.white,
+                      color: Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
@@ -326,7 +448,7 @@ class _MediaViewerState extends State<MediaViewer> {
                   child: Text(
                     'Нажмите для воспроизведения',
                     style: TextStyle(
-                      color: CupertinoColors.white,
+                      color: Colors.white,
                       fontSize: 16,
                       fontFamily: 'Poppins',
                     ),

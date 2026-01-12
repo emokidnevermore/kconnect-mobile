@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../features/auth/domain/models/account.dart';
+import '../core/constants/tab_bar_glass_mode.dart';
 
 /// Сервис для безопасного хранения данных в SharedPreferences
 ///
@@ -9,6 +11,9 @@ import '../features/auth/domain/models/account.dart';
 /// Все чувствительные данные хранятся в зашифрованном виде на уровне ОС.
 class StorageService {
   static Future<SharedPreferences> get _prefs async => await SharedPreferences.getInstance();
+  
+  // ValueNotifier для отслеживания изменений фона приложения
+  static final ValueNotifier<String?> appBackgroundPathNotifier = ValueNotifier<String?>(null);
 
   static Future<bool> hasActiveSession() async {
     final prefs = await _prefs;
@@ -172,6 +177,118 @@ class StorageService {
     final prefs = await _prefs;
     await prefs.remove('use_profile_accent_color');
     await prefs.remove('saved_accent_color');
+    await prefs.remove('tab_bar_glass_mode');
+    await prefs.remove('hide_tab_bar');
+    await prefs.remove('app_background_path');
+    await prefs.remove('app_background_type');
+    await prefs.remove('app_background_name');
+    await prefs.remove('app_background_size');
+    await prefs.remove('app_background_thumbnail_path');
+  }
+
+  // ValueNotifier для отслеживания изменений режима таб-бара
+  static final ValueNotifier<TabBarGlassMode> tabBarGlassModeNotifier = 
+      ValueNotifier<TabBarGlassMode>(TabBarGlassMode.glass);
+
+  static Future<TabBarGlassMode> getTabBarGlassMode() async {
+    final prefs = await _prefs;
+    final modeString = prefs.getString('tab_bar_glass_mode');
+    if (modeString == null) {
+      return TabBarGlassMode.solid; // По умолчанию solid
+    }
+    return TabBarGlassMode.fromString(modeString);
+  }
+
+  static Future<void> setTabBarGlassMode(TabBarGlassMode mode) async {
+    final prefs = await _prefs;
+    await prefs.setString('tab_bar_glass_mode', mode.toStorageString());
+    tabBarGlassModeNotifier.value = mode;
+  }
+
+  // Инициализация ValueNotifier при старте приложения
+  static Future<void> initializeTabBarGlassMode() async {
+    final mode = await getTabBarGlassMode();
+    tabBarGlassModeNotifier.value = mode;
+  }
+
+  static Future<bool> getHideTabBar() async {
+    final prefs = await _prefs;
+    return prefs.getBool('hide_tab_bar') ?? false; // По умолчанию false (показывать таб бар)
+  }
+
+  static Future<void> setHideTabBar(bool hide) async {
+    final prefs = await _prefs;
+    await prefs.setBool('hide_tab_bar', hide);
+  }
+
+  static Future<String?> getAppBackgroundPath() async {
+    final prefs = await _prefs;
+    return prefs.getString('app_background_path');
+  }
+
+  static Future<void> setAppBackgroundPath(String? path) async {
+    final prefs = await _prefs;
+    if (path == null) {
+      await prefs.remove('app_background_path');
+    } else {
+      await prefs.setString('app_background_path', path);
+    }
+    appBackgroundPathNotifier.value = path;
+  }
+
+  static Future<String?> getAppBackgroundType() async {
+    final prefs = await _prefs;
+    return prefs.getString('app_background_type');
+  }
+
+  static Future<void> setAppBackgroundType(String? type) async {
+    final prefs = await _prefs;
+    if (type == null) {
+      await prefs.remove('app_background_type');
+    } else {
+      await prefs.setString('app_background_type', type);
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getAppBackgroundMetadata() async {
+    final prefs = await _prefs;
+    final name = prefs.getString('app_background_name');
+    final size = prefs.getInt('app_background_size');
+    if (name == null && size == null) {
+      return null;
+    }
+    return {
+      'name': name,
+      'size': size,
+    };
+  }
+
+  static Future<void> setAppBackgroundMetadata(String? name, int? size) async {
+    final prefs = await _prefs;
+    if (name == null) {
+      await prefs.remove('app_background_name');
+    } else {
+      await prefs.setString('app_background_name', name);
+    }
+    if (size == null) {
+      await prefs.remove('app_background_size');
+    } else {
+      await prefs.setInt('app_background_size', size);
+    }
+  }
+
+  static Future<String?> getAppBackgroundThumbnailPath() async {
+    final prefs = await _prefs;
+    return prefs.getString('app_background_thumbnail_path');
+  }
+
+  static Future<void> setAppBackgroundThumbnailPath(String? path) async {
+    final prefs = await _prefs;
+    if (path == null) {
+      await prefs.remove('app_background_thumbnail_path');
+    } else {
+      await prefs.setString('app_background_thumbnail_path', path);
+    }
   }
 
   static Future<List<String>> getMusicPlayedTracksHistory(String userId) async {

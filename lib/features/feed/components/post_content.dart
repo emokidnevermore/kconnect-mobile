@@ -4,10 +4,8 @@
 /// выделение заголовков и hashtag'ов. Обеспечивает expand/collapse функциональность.
 library;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../core/widgets/profile_accent_color_provider.dart';
 import 'post_constants.dart';
@@ -49,7 +47,7 @@ class _PostContentState extends State<PostContent> {
       h6: AppTextStyles.postAuthor.copyWith(fontSize: headerFontSize - 10, fontWeight: FontWeight.w600),
       a: AppTextStyles.postContent.copyWith(color: context.profileAccentColor, decoration: TextDecoration.none),
       code: AppTextStyles.postContent.copyWith(
-        backgroundColor: AppColors.overlayDark,
+        backgroundColor: Colors.black.withValues(alpha: 0.5),
         fontFamily: 'monospace',
         fontSize: 13,
       ),
@@ -105,39 +103,15 @@ class _PostContentState extends State<PostContent> {
                     // Обычный контент с truncate
                     return ConstrainedBox(
                       constraints: BoxConstraints(maxHeight: widget.isRepostContent ? 100 : PostConstants.maxContentPreviewHeight),
-                      child: Stack(
-                        children: [
-                          ClipRect(
-                            child: RepaintBoundary(
-                              child: MarkdownBody(
-                                data: PostUtils.preprocessText(
-                                  PostUtils.truncateContent(widget.content, PostConstants.maxContentLength)
-                                ),
-                                styleSheet: _getMarkdownStyleSheet(true, context),
-                              ),
+                      child: ClipRect(
+                        child: RepaintBoundary(
+                          child: MarkdownBody(
+                            data: PostUtils.preprocessText(
+                              PostUtils.truncateContent(widget.content, PostConstants.maxContentLength)
                             ),
+                            styleSheet: _getMarkdownStyleSheet(true, context),
                           ),
-                          // Градиентная маска для длинного контента
-                          if (widget.content.length > PostConstants.maxContentLength)
-                            Positioned(
-                              bottom: 0,
-                              left: 0,
-                              right: 0,
-                              height: PostConstants.gradientMaskHeight,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      AppColors.bgCard.withValues(alpha:0.0),
-                                      AppColors.bgCard,
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
+                        ),
                       ),
                     );
                   }

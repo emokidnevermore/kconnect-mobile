@@ -6,9 +6,8 @@
 // Карточка артиста квадратная с закругленными углами
 library;
 
-import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../theme/app_colors.dart';
+import 'package:flutter/material.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/theme_extensions.dart';
@@ -52,17 +51,17 @@ class ArtistCard extends StatelessWidget {
                     placeholder: (context, url) => Container(
                       width: 140,
                       height: 140,
-                      color: AppColors.bgCard,
-                      child: const CupertinoActivityIndicator(radius: 15),
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: const CircularProgressIndicator(strokeWidth: 2),
                     ),
                     errorWidget: (context, url, error) => Container(
                       width: 140,
                       height: 140,
-                      color: AppColors.bgCard,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                       child: const Icon(
-                        CupertinoIcons.person,
+                        Icons.person,
                         size: 70,
-                        color: CupertinoColors.systemGrey,
+                        color: Colors.grey,
                       ),
                     ),
                   ),
@@ -96,7 +95,7 @@ class ArtistCard extends StatelessWidget {
                           style: AppTextStyles.bodyMedium.copyWith(
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
-                            color: AppColors.textPrimary,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -111,10 +110,10 @@ class ArtistCard extends StatelessWidget {
                             color: context.dynamicPrimaryColor,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
-                            CupertinoIcons.checkmark_alt,
+                          child: Icon(
+                            Icons.check_circle,
                             size: 8,
-                            color: AppColors.bgWhite,
+                            color: Theme.of(context).colorScheme.onPrimary,
                           ),
                         ),
                     ],

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../theme/app_colors.dart';
 import '../../../../core/utils/theme_extensions.dart';
+import '../../../../core/widgets/authorized_cached_network_image.dart';
 import '../../domain/models/account.dart';
 
 class AccountSwitchingAnimation extends StatefulWidget {
@@ -72,7 +72,7 @@ class _AccountSwitchingAnimationState extends State<AccountSwitchingAnimation>
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.bgDark.withValues(alpha:0.9),
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
       child: Center(
         child: AnimatedBuilder(
           animation: _controller,
@@ -118,7 +118,7 @@ class _AccountSwitchingAnimationState extends State<AccountSwitchingAnimation>
                         height: 80,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: AppColors.textSecondary.withValues(alpha: 0.2),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
                           border: Border.all(
                             color: context.dynamicPrimaryColor,
                             width: 2,
@@ -126,19 +126,22 @@ class _AccountSwitchingAnimationState extends State<AccountSwitchingAnimation>
                         ),
                         child: widget.targetAccount.avatarUrl != null
                             ? ClipOval(
-                                child: Image.network(
-                                  widget.targetAccount.avatarUrl!,
+                                child: AuthorizedCachedNetworkImage(
+                                  imageUrl: widget.targetAccount.avatarUrl!,
+                                  width: double.infinity,
+                                  height: double.infinity,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Icon(
+                                  filterQuality: FilterQuality.low,
+                                  errorWidget: (context, url, error) => Icon(
                                     Icons.person,
-                                    color: AppColors.bgWhite,
+                                    color: Theme.of(context).colorScheme.onPrimary,
                                     size: 40,
                                   ),
                                 ),
                               )
                             : Icon(
                                 Icons.person,
-                                color: AppColors.bgWhite,
+                                color: Theme.of(context).colorScheme.onPrimary,
                                 size: 40,
                               ),
                       ),
@@ -149,7 +152,7 @@ class _AccountSwitchingAnimationState extends State<AccountSwitchingAnimation>
                         child: Text(
                           'Переключение...',
                           style: TextStyle(
-                            color: AppColors.textPrimary,
+                            color: Theme.of(context).colorScheme.onSurface,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),

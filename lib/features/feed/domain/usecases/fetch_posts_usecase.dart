@@ -1,5 +1,6 @@
 import '../models/post.dart';
 import '../models/comment.dart';
+import '../models/poll.dart';
 import '../repositories/feed_repository.dart';
 
 /// Use case для получения постов ленты новостей
@@ -124,5 +125,26 @@ class LikeCommentUseCase {
   /// [commentId] - идентификатор комментария
   Future<void> call(int commentId) {
     return _repository.likeComment(commentId);
+  }
+}
+
+/// Use case для голосования в опросе
+///
+/// Управляет голосованием пользователя в опросах постов.
+/// Поддерживает как одиночный, так и множественный выбор вариантов.
+class VotePollUseCase {
+  final FeedRepository _repository;
+
+  VotePollUseCase(this._repository);
+
+  /// Выполняет голосование в опросе
+  ///
+  /// [pollId] - идентификатор опроса
+  /// [optionIds] - список ID выбранных вариантов ответа
+  /// [isMultipleChoice] - флаг множественного выбора
+  /// [hasExistingVotes] - флаг наличия существующих голосов
+  /// Returns: обновленный объект опроса с новыми результатами
+  Future<Poll> call(int pollId, List<int> optionIds, {bool isMultipleChoice = false, bool hasExistingVotes = false}) {
+    return _repository.votePoll(pollId, optionIds, isMultipleChoice: isMultipleChoice, hasExistingVotes: hasExistingVotes);
   }
 }

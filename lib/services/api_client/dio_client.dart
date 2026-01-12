@@ -91,6 +91,15 @@ class WrappedDioClient {
     return regularDio.delete(path, options: Options(headers: headers, extra: {'withCredentials': true}));
   }
 
+  /// Выполняет PUT запрос к API
+  ///
+  /// [path] - путь к API эндпоинту (без baseUrl)
+  /// [data] - данные для отправки в JSON формате
+  /// [headers] - дополнительные заголовки запроса
+  Future<Response> put(String path, Map<String, dynamic>? data, {Map<String, dynamic>? headers}) async {
+    return regularDio.put(path, data: data, options: Options(headers: headers, extra: {'withCredentials': true}));
+  }
+
   /// Выполняет POST запрос с FormData (для загрузки файлов)
   ///
   /// [path] - путь к API эндпоинту (без baseUrl)

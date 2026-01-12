@@ -1,12 +1,12 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kconnect_mobile/features/messages/presentation/blocs/messages_bloc.dart';
 import 'package:kconnect_mobile/features/messages/presentation/blocs/messages_event.dart';
 import 'package:kconnect_mobile/features/messages/presentation/blocs/messages_state.dart';
 import 'package:kconnect_mobile/features/messages/presentation/widgets/chat_tile.dart';
-import 'package:kconnect_mobile/theme/app_colors.dart';
+import 'package:kconnect_mobile/core/utils/theme_extensions.dart';
 import 'package:kconnect_mobile/theme/app_text_styles.dart';
+import 'package:kconnect_mobile/services/storage_service.dart';
 
 /// Экран списка сообщений
 ///
@@ -44,40 +44,57 @@ class _MessagesScreenState extends State<MessagesScreen> with AutomaticKeepAlive
     super.build(context);
     return BlocBuilder<MessagesBloc, MessagesState>(
       builder: (context, state) {
-        return Scaffold(
-          backgroundColor: AppColors.bgDark,
-          body: SafeArea(
-            child: Column(
-              children: [
-                // Search bar
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: TextField(
-                    controller: _searchController,
-                    style: const TextStyle(color: AppColors.bgWhite),
-                    decoration: InputDecoration(
-                      hintText: 'Поиск чатов...',
-                      hintStyle: TextStyle(color: AppColors.bgWhite.withValues(alpha: 0.5)),
-                      prefixIcon: const Icon(CupertinoIcons.search, color: AppColors.bgWhite),
-                      filled: true,
-                      fillColor: AppColors.bgDark.withValues(alpha: 0.3),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
+        return GestureDetector(
+          onTap: () {
+            FocusScope.of(context).unfocus();
+          },
+          behavior: HitTestBehavior.opaque,
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: SafeArea(
+              child: Column(
+                children: [
+                  // Отступ сверху под хедер
+                  const SizedBox(height: 44),
+                  // Search bar
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: ValueListenableBuilder<String?>(
+                      valueListenable: StorageService.appBackgroundPathNotifier,
+                      builder: (context, backgroundPath, child) {
+                        final hasBackground = backgroundPath != null && backgroundPath.isNotEmpty;
+                        final fillColor = hasBackground 
+                            ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.3)
+                            : Theme.of(context).colorScheme.surfaceContainerLow;
+                        
+                        return TextField(
+                          controller: _searchController,
+                          style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
+                          decoration: InputDecoration(
+                            hintText: 'Поиск чатов...',
+                            hintStyle: TextStyle(color: context.dynamicPrimaryColor.withValues(alpha: 0.8)),
+                            prefixIcon: Icon(Icons.search, color: context.dynamicPrimaryColor),
+                            filled: true,
+                            fillColor: fillColor,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          onChanged: (query) {
+                            context.read<MessagesBloc>().add(SearchChatsEvent(query));
+                          },
+                        );
+                      },
                     ),
-                    onChanged: (query) {
-                      context.read<MessagesBloc>().add(SearchChatsEvent(query));
-                    },
                   ),
-                ),
 
                 // Chat list
                 Expanded(
                   child: state.status == MessagesStatus.loading && state.chats.isEmpty
                       ? Center(
                           child: CircularProgressIndicator(
-                            color: AppColors.primaryPurple,
+                            color: context.dynamicPrimaryColor,
                           ),
                         )
                       : state.filteredChats.isEmpty
@@ -86,9 +103,9 @@ class _MessagesScreenState extends State<MessagesScreen> with AutomaticKeepAlive
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(
-                                    CupertinoIcons.chat_bubble_2,
+                                    Icons.chat_bubble_outline,
                                     size: 64,
-                                    color: AppColors.bgWhite.withValues(alpha: 0.3),
+                                    color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.3),
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
@@ -96,7 +113,7 @@ class _MessagesScreenState extends State<MessagesScreen> with AutomaticKeepAlive
                                         ? 'Нет чатов'
                                         : 'Чаты не найдены',
                                     style: AppTextStyles.body.copyWith(
-                                      color: AppColors.bgWhite.withValues(alpha: 0.7),
+                                      color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.7),
                                     ),
                                   ),
                                 ],
@@ -111,13 +128,17 @@ class _MessagesScreenState extends State<MessagesScreen> with AutomaticKeepAlive
                                 itemCount: state.filteredChats.length,
                                 itemBuilder: (context, index) {
                                   final chat = state.filteredChats[index];
-                                  return ChatTile(chat: chat);
+                                  return ChatTile(
+                                    key: ValueKey(chat.id),
+                                    chat: chat,
+                                  );
                                 },
                               ),
                             ),
                 ),
               ],
             ),
+          ),
           ),
         );
       },

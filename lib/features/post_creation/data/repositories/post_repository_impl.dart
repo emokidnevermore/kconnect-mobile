@@ -18,7 +18,14 @@ class PostRepositoryImpl implements PostRepository {
         content: params.content,
         isNsfw: params.isNsfw,
         imagePaths: params.imagePaths,
+        videoPath: params.videoPath,
+        videoThumbnailPath: params.videoThumbnailPath,
         musicTracks: params.musicTracks,
+        pollQuestion: params.pollQuestion,
+        pollOptions: params.pollOptions,
+        pollIsAnonymous: params.pollIsAnonymous,
+        pollIsMultiple: params.pollIsMultiple,
+        pollExpiresInDays: params.pollExpiresInDays,
       );
 
       final post = Post.fromJson(response);

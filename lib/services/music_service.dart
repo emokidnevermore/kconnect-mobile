@@ -9,6 +9,8 @@ import 'api_client/dio_client.dart';
 import '../features/music/domain/models/track.dart';
 import '../features/music/domain/models/playlist.dart';
 import '../features/music/domain/models/artist.dart';
+import '../features/music/domain/models/artist_detail.dart';
+import '../features/music/domain/models/album.dart';
 
 typedef PaginatedPlaylistsResponse = PaginatedResponse<Playlist>;
 typedef PaginatedTracksResponse = PaginatedResponse<Track>;
@@ -142,6 +144,47 @@ class MusicService {
       }
     } on DioException catch (e) {
       throw Exception('Failed to fetch recommended artists: ${e.response?.statusCode ?? 'Network error'}');
+    }
+  }
+
+  Future<ArtistDetail> fetchArtistDetails(int artistId, {int page = 1, int perPage = 40}) async {
+    try {
+      final res = await _client.get('/api/music/artist', queryParameters: {
+        'id': artistId,
+        'page': page,
+        'per_page': perPage,
+      });
+      if (res.statusCode == 200) {
+        final data = res.data as Map<String, dynamic>;
+        return ArtistDetail.fromJson(data);
+      } else {
+        throw Exception('Failed to fetch artist details: ${res.statusCode}');
+      }
+    } on DioException catch (e) {
+      throw Exception('Failed to fetch artist details: ${e.response?.statusCode ?? 'Network error'}');
+    }
+  }
+
+  Future<List<Album>> fetchArtistAlbums(int artistId) async {
+    try {
+      final res = await _client.get('/api/music/albums/artist/$artistId');
+      if (res.statusCode == 200) {
+        final data = res.data as Map<String, dynamic>;
+        final albumsData = List<Map<String, dynamic>>.from(data['albums'] ?? []);
+        final albums = <Album>[];
+        for (final albumJson in albumsData) {
+          try {
+            albums.add(Album.fromJson(albumJson));
+          } catch (e) {
+            // Пропускаем альбомы, которые не удалось распарсить
+          }
+        }
+        return albums;
+      } else {
+        throw Exception('Failed to fetch artist albums: ${res.statusCode}');
+      }
+    } on DioException catch (e) {
+      throw Exception('Failed to fetch artist albums: ${e.response?.statusCode ?? 'Network error'}');
     }
   }
 

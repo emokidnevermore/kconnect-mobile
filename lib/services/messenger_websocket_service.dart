@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
@@ -58,16 +59,17 @@ class MessengerWebSocketService {
   int _reconnectAttempts = 0;
   static const int _maxReconnectAttempts = 5;
   static const Duration _reconnectDelay = Duration(seconds: 3);
-  static const Duration _pingInterval = Duration(seconds: 20);
 
   String? _deviceId;
   String? _sessionKey;
   bool _isAuthenticated = false;
+  final List<Map<String, dynamic>> _messageQueue = [];
 
   Stream<WebSocketMessage> get messages => _messageController.stream;
   Stream<WebSocketConnectionState> get connectionState => _connectionController.stream;
   WebSocketConnectionState get currentConnectionState => _connectionState;
   bool get isAuthenticated => _isAuthenticated;
+  String? get currentDeviceId => _deviceId;
 
   MessengerWebSocketService(this._dioClient) {
     _generateDeviceId();
@@ -107,6 +109,7 @@ class MessengerWebSocketService {
       _updateConnectionState(WebSocketConnectionState.connected);
       _reconnectAttempts = 0;
       _isAuthenticated = false;
+      _messageQueue.clear(); // Clear queue on new connection
 
       _subscription = _channel!.stream.listen(
         _onMessage,
@@ -128,21 +131,53 @@ class MessengerWebSocketService {
   Future<void> _sendAuthMessage() async {
     if (_sessionKey == null || _deviceId == null) return;
 
+    // Determine platform
+    String platform;
+    if (Platform.isIOS) {
+      platform = 'iOS';
+    } else if (Platform.isAndroid) {
+      platform = 'Android';
+    } else if (Platform.isWindows) {
+      platform = 'Windows';
+    } else if (Platform.isMacOS) {
+      platform = 'macOS';
+    } else if (Platform.isLinux) {
+      platform = 'Linux';
+    } else {
+      platform = 'Unknown';
+    }
+
+    // Get device model (simplified)
+    String device = platform;
+    if (Platform.isAndroid) {
+      device = 'Android Device';
+    } else if (Platform.isIOS) {
+      device = 'iOS Device';
+    }
+
     final authMessage = {
       'type': 'auth',
-      'session_key': _sessionKey,
+      'token': _sessionKey, // API expects 'token', not 'session_key'
       'device_id': _deviceId,
+      'client_info': {
+        'platform': platform,
+        'version': '0.1.0', // From pubspec.yaml
+        'device': device,
+      },
     };
 
     _sendMessage(authMessage);
   }
 
   void disconnect() {
-    _stopPingTimer();
+    _pingTimer?.cancel();
+    _pingTimer = null;
     _stopReconnectTimer();
     _subscription?.cancel();
     _channel?.sink.close(status.goingAway);
     _channel = null;
+    _isAuthenticated = false;
+    _messageQueue.clear(); // Clear queue on disconnect
     _updateConnectionState(WebSocketConnectionState.disconnected);
   }
 
@@ -155,7 +190,12 @@ class MessengerWebSocketService {
       if (wsMessage.type == 'connected') {
         debugPrint('WebSocket: Authentication successful');
         _isAuthenticated = true;
-        _startPingTimer();
+        // Don't start ping timer - server sends ping, we only respond with pong
+        // Send queued messages after authentication
+        _flushMessageQueue();
+      } else if (wsMessage.type == 'ping') {
+        // Respond to server ping with pong
+        _sendPong(wsMessage.data);
       }
 
       _messageController.add(wsMessage);
@@ -185,24 +225,17 @@ class MessengerWebSocketService {
     _connectionController.add(state);
   }
 
-  void _startPingTimer() {
-    _stopPingTimer();
-    _pingTimer = Timer.periodic(_pingInterval, (_) => _sendPing());
-  }
+  // Ping/Pong: Server sends ping, client only responds with pong
+  // No need to send ping from client
 
-  void _stopPingTimer() {
-    _pingTimer?.cancel();
-    _pingTimer = null;
-  }
-
-  void _sendPing() {
+  void _sendPong(Map<String, dynamic> pingData) {
     if (_connectionState == WebSocketConnectionState.connected) {
-      final pingMessage = {
-        'type': 'ping',
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'ping_id': _generatePingId(),
+      final pongMessage = {
+        'type': 'pong',
+        'timestamp': pingData['timestamp'] as num? ?? DateTime.now().millisecondsSinceEpoch,
+        'ping_id': pingData['ping_id'] as String? ?? _generatePingId(),
       };
-      _sendMessage(pingMessage);
+      _sendMessage(pongMessage);
     }
   }
 
@@ -229,11 +262,38 @@ class MessengerWebSocketService {
 
   void _sendMessage(Map<String, dynamic> message) {
     if (_connectionState == WebSocketConnectionState.connected && _channel != null) {
+      // If not authenticated and message requires auth, queue it
+      if (!_isAuthenticated && _requiresAuth(message)) {
+        debugPrint('WebSocket: Queueing message (not authenticated yet): ${message['type']}');
+        _messageQueue.add(message);
+        return;
+      }
+
       final jsonMessage = json.encode(message);
       debugPrint('WebSocket: Sending: $jsonMessage');
       _channel!.sink.add(jsonMessage);
     } else {
       debugPrint('WebSocket: Cannot send message - not connected');
+    }
+  }
+
+  bool _requiresAuth(Map<String, dynamic> message) {
+    final type = message['type'] as String?;
+    // Auth and ping don't require authentication
+    return type != 'auth' && type != 'ping';
+  }
+
+  void _flushMessageQueue() {
+    if (_messageQueue.isEmpty) return;
+
+    debugPrint('WebSocket: Flushing ${_messageQueue.length} queued messages');
+    final messagesToSend = List<Map<String, dynamic>>.from(_messageQueue);
+    _messageQueue.clear();
+
+    for (final message in messagesToSend) {
+      final jsonMessage = json.encode(message);
+      debugPrint('WebSocket: Sending queued message: $jsonMessage');
+      _channel?.sink.add(jsonMessage);
     }
   }
 
@@ -249,16 +309,34 @@ class MessengerWebSocketService {
     required String content,
     required int chatId,
     required String clientMessageId,
-    String messageType = 'text',
+    String? tempId,
+    int? replyToId,
+    int? forwardedFromId,
   }) {
-    final message = {
+    if (!_isAuthenticated) {
+      debugPrint('WebSocket: Cannot send message - not authenticated');
+      return;
+    }
+
+    final message = <String, dynamic>{
       'type': 'send_message',
-      'content': content,
-      'chat_id': chatId,
-      'client_message_id': clientMessageId,
-      'message_type': messageType,
-      'timestamp': DateTime.now().toIso8601String(),
+      'chatId': chatId, // camelCase as per Swift implementation
+      'text': content, // 'text' not 'content' as per Swift implementation
+      'clientMessageId': clientMessageId,
     };
+
+    if (tempId != null) {
+      message['tempId'] = tempId;
+    }
+
+    if (replyToId != null) {
+      message['replyToId'] = replyToId;
+    }
+
+    if (forwardedFromId != null) {
+      message['forwarded_from_id'] = forwardedFromId;
+    }
+
     _sendMessage(message);
   }
 
@@ -271,17 +349,88 @@ class MessengerWebSocketService {
     _sendMessage(message);
   }
 
+  void sendGetMessagesMessage({
+    required int chatId,
+    int? limit,
+    int? beforeId,
+    bool? forceRefresh,
+  }) {
+    final message = <String, dynamic>{
+      'type': 'get_messages',
+      'chat_id': chatId,
+    };
+
+    if (limit != null) {
+      message['limit'] = limit;
+    }
+
+    if (beforeId != null) {
+      message['before_id'] = beforeId;
+    }
+
+    if (forceRefresh != null) {
+      message['force_refresh'] = forceRefresh;
+    }
+
+    _sendMessage(message);
+  }
+
+  void sendTypingStart(int chatId) {
+    final message = {
+      'type': 'typing_start',
+      'chatId': chatId,
+    };
+    _sendMessage(message);
+  }
+
+  void sendTypingEnd(int chatId) {
+    final message = {
+      'type': 'typing_end',
+      'chatId': chatId,
+    };
+    _sendMessage(message);
+  }
+
+  void sendDeliveryConfirmation({
+    required String deliveryId,
+    required int messageId,
+    required int chatId,
+  }) {
+    final message = {
+      'type': 'delivery_confirmation',
+      'delivery_id': deliveryId,
+      'messageId': messageId,
+      'chatId': chatId,
+    };
+    _sendMessage(message);
+  }
+
   void sendReadReceipt({
     required int messageId,
     required int chatId,
   }) {
     final message = {
       'type': 'read_receipt',
-      'message_id': messageId,
-      'chat_id': chatId,
-      'device_id': _deviceId,
+      'messageId': messageId,
+      'chatId': chatId, // camelCase as per Swift implementation
     };
     _sendMessage(message);
+  }
+
+  /// Запросить статистику соединения
+  ///
+  /// Отправляет запрос `connection_stats` для получения статистики WebSocket соединения
+  void requestConnectionStats() {
+    if (_connectionState != WebSocketConnectionState.connected || !_isAuthenticated) {
+      debugPrint('WebSocket: Cannot request connection stats - not connected or authenticated');
+      return;
+    }
+
+    final message = {
+      'type': 'connection_stats',
+    };
+    _sendMessage(message);
+    debugPrint('WebSocket: Requested connection stats');
   }
 
   void dispose() {

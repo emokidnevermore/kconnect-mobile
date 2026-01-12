@@ -5,7 +5,6 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 
 /// Виджет контейнера с поддержкой swipe-to-pop
@@ -30,6 +29,7 @@ class SwipePopContainer extends StatefulWidget {
 
 class _SwipePopContainerState extends State<SwipePopContainer> {
   double _dragDistance = 0;
+  double _verticalDragDistance = 0;
   late HorizontalDragGestureRecognizer _recognizer;
 
   @override
@@ -38,11 +38,16 @@ class _SwipePopContainerState extends State<SwipePopContainer> {
     _recognizer = HorizontalDragGestureRecognizer()
       ..onStart = (details) {
         _dragDistance = 0;
+        _verticalDragDistance = 0;
       }
       ..onUpdate = (details) {
         _dragDistance += details.delta.dx;
+        _verticalDragDistance += details.delta.dy.abs();
       }
       ..onEnd = (details) {
+        // Ignore swipe if there's significant vertical movement (for pull-to-refresh)
+        if (_verticalDragDistance > 20) return;
+
         final swipedRight = _dragDistance > 50;
         final fastVelocity = details.velocity.pixelsPerSecond.dx > 300;
         final longDistance = _dragDistance > 100;

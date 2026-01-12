@@ -5,9 +5,8 @@
 /// Автоматически рассчитывает размеры и пропорции.
 library;
 
-import 'package:flutter/cupertino.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../theme/app_colors.dart';
+import 'package:flutter/material.dart';
 import 'post_constants.dart';
 
 /// Компонент медиа поста (изображения и видео)
@@ -18,6 +17,12 @@ class PostMedia extends StatelessWidget {
   final String? videoPoster;
   final bool isFullWidth;
   final ValueChanged<int>? onMediaTap;
+  /// Префикс для Hero тегов (для различения постов в ленте и профиле)
+  final String? heroTagPrefix;
+  /// ID поста для уникальности Hero тегов (необходимо для предотвращения дубликатов)
+  final int? postId;
+  /// Индекс поста в ленте для уникальности Hero тегов (необходимо для предотвращения дубликатов)
+  final int? feedIndex;
 
   const PostMedia({
     super.key,
@@ -27,6 +32,9 @@ class PostMedia extends StatelessWidget {
     this.videoPoster,
     this.isFullWidth = true,
     this.onMediaTap,
+    this.heroTagPrefix,
+    this.postId,
+    this.feedIndex,
   });
 
 
@@ -72,57 +80,71 @@ class PostMedia extends StatelessWidget {
     final int imageCount = imageUrls.length;
 
     if (imageCount == 1) {
-      // 1 изображение/видео
+      // 1 изображение/видео с Hero анимацией
+      final prefix = heroTagPrefix ?? 'post_media';
+      // Используем postId и feedIndex для уникальности, если они доступны
+      final postIdSuffix = postId != null ? '_$postId' : '';
+      final feedIndexSuffix = feedIndex != null ? '_feed$feedIndex' : '';
+      final heroTag = '${prefix}_${imageUrls[0].hashCode}_0$postIdSuffix$feedIndexSuffix';
+      final isVideo = videoUrl != null && videoUrl!.isNotEmpty && videoPoster != null && imageUrls[0] == videoPoster;
+      
       return GestureDetector(
         onTap: onMediaTap != null ? () => onMediaTap!(0) : null,
-        child: Container(
-          height: containerWidth,
-          width: containerWidth,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PostConstants.borderRadius),
-          ),
-          child: Stack(
-            children: [
-              ClipRRect(
+        child: Hero(
+          tag: heroTag,
+          transitionOnUserGestures: true,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              height: containerWidth,
+              width: containerWidth,
+              decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(PostConstants.borderRadius),
-                child: CachedNetworkImage(
-                  imageUrl: imageUrls[0],
-                  width: containerWidth,
-                  height: containerWidth,
-                  fit: BoxFit.cover,
-                  filterQuality: FilterQuality.low,
-                  placeholder: (context, url) => const CupertinoActivityIndicator(radius: 10),
-                  errorWidget: (context, url, error) => Container(
-                    color: AppColors.bgCard,
-                    child: const Center(
-                      child: Icon(
-                        CupertinoIcons.exclamationmark_triangle,
-                        color: CupertinoColors.systemGrey,
-                      ),
-                    ),
-                  ),
-                ),
               ),
-              // Кнопка play
-              if (videoUrl != null && videoUrl!.isNotEmpty && videoPoster != null && imageUrls[0] == videoPoster)
-                Positioned.fill(
-                  child: Center(
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: const BoxDecoration(
-                        color: Color.fromRGBO(0, 0, 0, 0.7),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.play_fill,
-                        color: AppColors.bgWhite,
-                        size: 24,
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(PostConstants.borderRadius),
+                    child: CachedNetworkImage(
+                      imageUrl: imageUrls[0],
+                      width: containerWidth,
+                      height: containerWidth,
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.low,
+                      placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                      errorWidget: (context, url, error) => Container(
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        child: Center(
+                          child: Icon(
+                            Icons.warning,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+                  // Кнопка play
+                  if (isVideo)
+                    Positioned.fill(
+                      child: Center(
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.scrim,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.play_arrow,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       );
@@ -151,6 +173,12 @@ class PostMedia extends StatelessWidget {
               final imageUrl = imageEntry.value;
               final globalIndex = rows.take(rowIndex).fold(0, (sum, row) => sum + row.length) + imageIndex;
 
+              final prefix = heroTagPrefix ?? 'post_media';
+              // Используем postId и feedIndex для уникальности, если они доступны
+              final postIdSuffix = postId != null ? '_$postId' : '';
+              final feedIndexSuffix = feedIndex != null ? '_feed$feedIndex' : '';
+              final heroTag = '${prefix}_${imageUrl.hashCode}_$globalIndex$postIdSuffix$feedIndexSuffix';
+              
               return Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(right: imageIndex < rowImages.length - 1 ? spacing : 0),
@@ -158,24 +186,31 @@ class PostMedia extends StatelessWidget {
                     onTap: onMediaTap != null ? () {
                       onMediaTap!(globalIndex);
                     } : null,
-                    child: Container(
-                      height: imageSize,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(PostConstants.borderRadius),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(PostConstants.borderRadius),
-                        child: CachedNetworkImage(
-                          imageUrl: imageUrl,
-                          fit: BoxFit.cover,
-                          filterQuality: FilterQuality.low,
-                          placeholder: (context, url) => const CupertinoActivityIndicator(radius: 10),
-                          errorWidget: (context, url, error) => Container(
-                            color: AppColors.bgCard,
-                            child: const Center(
-                              child: Icon(
-                                CupertinoIcons.exclamationmark_triangle,
-                                color: CupertinoColors.systemGrey,
+                    child: Hero(
+                      tag: heroTag,
+                      transitionOnUserGestures: true,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          height: imageSize,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(PostConstants.borderRadius),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(PostConstants.borderRadius),
+                            child: CachedNetworkImage(
+                              imageUrl: imageUrl,
+                              fit: BoxFit.cover,
+                              filterQuality: FilterQuality.low,
+                              placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                              errorWidget: (context, url, error) => Container(
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                child: Center(
+                                  child: Icon(
+                                    Icons.warning,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
                               ),
                             ),
                           ),

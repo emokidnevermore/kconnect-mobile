@@ -38,6 +38,9 @@ class MusicBloc extends Bloc<MusicEvent, MusicState> {
     on<MusicPublicPlaylistsFetched>(_onPublicPlaylistsFetched);
     on<MusicMyVibeFetched>(_onMyVibeFetched);
     on<MusicRecommendedArtistsFetched>(_onRecommendedArtistsFetched);
+    on<MusicArtistDetailsFetched>(_onArtistDetailsFetched);
+    on<MusicArtistTracksLoadMore>(_onArtistTracksLoadMore);
+    on<MusicArtistAlbumsFetched>(_onArtistAlbumsFetched);
     on<MusicTrackLiked>(_onTrackLiked);
     on<MusicTracksSearched>(_onTracksSearched);
     on<MusicPlayedTracksHistoryLoaded>(_onPlayedTracksHistoryLoaded);
@@ -443,6 +446,132 @@ class MusicBloc extends Bloc<MusicEvent, MusicState> {
     }
   }
 
+  /// Обработчик загрузки детальной информации об артисте
+  ///
+  /// Выполняет загрузку полной информации об артисте включая треки.
+  /// Поддерживает пагинацию треков артиста.
+  void _onArtistDetailsFetched(MusicArtistDetailsFetched event, Emitter<MusicState> emit) async {
+    if (state.artistDetailsStatus == MusicLoadStatus.loading && !event.forceRefresh) return;
+
+    try {
+      emit(state.copyWith(artistDetailsStatus: MusicLoadStatus.loading));
+      final artistDetail = await _musicRepository.fetchArtistDetails(
+        event.artistId,
+        page: event.page,
+      );
+
+      emit(state.copyWith(
+        currentArtist: artistDetail,
+        artistDetailsStatus: MusicLoadStatus.success,
+        artistTracksCurrentPage: artistDetail.currentPage,
+        artistTracksHasNextPage: artistDetail.hasNextPage,
+      ));
+      
+      // После загрузки треков артиста, обновляем популярные треки (топ 5 по plays_count)
+      if (artistDetail.tracks.isNotEmpty) {
+        final popularTracks = List<Track>.from(artistDetail.tracks)
+          ..sort((a, b) => b.playsCount.compareTo(a.playsCount));
+        final top5PopularTracks = popularTracks.take(5).toList();
+        
+        emit(state.copyWith(
+          artistPopularTracks: top5PopularTracks,
+          artistPopularTracksStatus: MusicLoadStatus.success,
+        ));
+      }
+    } catch (e) {
+      emit(state.copyWith(
+        artistDetailsStatus: MusicLoadStatus.failure,
+        error: e.toString(),
+      ));
+    }
+  }
+
+  /// Обработчик загрузки следующей страницы треков артиста
+  ///
+  /// Выполняет пагинацию вперед для списка треков артиста.
+  /// Добавляет новые треки к существующему списку.
+  void _onArtistTracksLoadMore(MusicArtistTracksLoadMore event, Emitter<MusicState> emit) async {
+    if (!state.artistTracksHasNextPage || 
+        state.artistDetailsStatus == MusicLoadStatus.loading ||
+        state.currentArtist == null) {
+      return;
+    }
+
+    try {
+      emit(state.copyWith(artistDetailsStatus: MusicLoadStatus.loading));
+      final nextPage = state.artistTracksCurrentPage + 1;
+      final artistDetail = await _musicRepository.fetchArtistDetails(
+        event.artistId,
+        page: nextPage,
+      );
+
+      // Объединяем существующие треки с новыми
+      final existingTracks = state.currentArtist!.tracks;
+      final newTracks = artistDetail.tracks;
+      final allTracks = [...existingTracks, ...newTracks];
+
+      final updatedArtist = state.currentArtist!.copyWith(
+        tracks: allTracks,
+        currentPage: artistDetail.currentPage,
+      );
+
+      emit(state.copyWith(
+        currentArtist: updatedArtist,
+        artistDetailsStatus: MusicLoadStatus.success,
+        artistTracksCurrentPage: artistDetail.currentPage,
+        artistTracksHasNextPage: artistDetail.hasNextPage,
+      ));
+    } catch (e) {
+      emit(state.copyWith(
+        artistDetailsStatus: MusicLoadStatus.failure,
+        error: e.toString(),
+      ));
+    }
+  }
+
+  /// Обработчик загрузки альбомов артиста
+  ///
+  /// Выполняет загрузку списка альбомов артиста.
+  void _onArtistAlbumsFetched(MusicArtistAlbumsFetched event, Emitter<MusicState> emit) async {
+    if (state.artistAlbumsStatus == MusicLoadStatus.loading && !event.forceRefresh) return;
+
+    try {
+      emit(state.copyWith(artistAlbumsStatus: MusicLoadStatus.loading));
+      final albums = await _musicRepository.fetchArtistAlbums(event.artistId);
+      
+      developer.log('MusicBloc: Loaded ${albums.length} albums for artist ${event.artistId}');
+      for (final album in albums) {
+        developer.log('  - Album: ${album.title} (${album.id}), tracks: ${album.tracksCount}');
+      }
+
+      emit(state.copyWith(
+        artistAlbums: albums,
+        artistAlbumsStatus: MusicLoadStatus.success,
+      ));
+      
+      // Получаем популярные треки из треков артиста (топ 5 по plays_count)
+      // Делаем это после успешной загрузки альбомов, чтобы треки уже были загружены
+      final artistTracks = state.currentArtist?.tracks ?? [];
+      if (artistTracks.isNotEmpty) {
+        final popularTracks = List<Track>.from(artistTracks)
+          ..sort((a, b) => b.playsCount.compareTo(a.playsCount));
+        final top5PopularTracks = popularTracks.take(5).toList();
+
+        emit(state.copyWith(
+          artistPopularTracks: top5PopularTracks,
+          artistPopularTracksStatus: MusicLoadStatus.success,
+        ));
+      }
+    } catch (e, stackTrace) {
+      developer.log('MusicBloc: Error loading albums: $e');
+      developer.log('Stack trace: $stackTrace');
+      emit(state.copyWith(
+        artistAlbumsStatus: MusicLoadStatus.failure,
+        error: e.toString(),
+      ));
+    }
+  }
+
   /// Обработчик постановки/снятия лайка с трека
   ///
   /// Переключает статус лайка для указанного трека.
@@ -466,6 +595,9 @@ class MusicBloc extends Bloc<MusicEvent, MusicState> {
           key,
           tracks.map((t) => t.id == updatedTrack.id ? updatedTrack : t).toList(),
         )),
+        currentArtist: state.currentArtist?.copyWith(
+                tracks: _updateTrackInList(state.currentArtist!.tracks, updatedTrack),
+              ),
       ));
     } catch (e) {
       emit(state.copyWith(error: e.toString()));

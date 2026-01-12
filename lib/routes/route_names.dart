@@ -14,4 +14,7 @@ class RouteNames {
   static const personalization = '/personalization';
   static const mediaViewer = '/media-viewer';
   static const createPost = '/create-post';
+  static const createChat = '/create-chat';
+  static const cacheManagement = '/cache-management';
+  static const blacklist = '/blacklist';
 }

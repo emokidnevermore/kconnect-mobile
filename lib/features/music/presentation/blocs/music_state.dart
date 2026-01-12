@@ -9,6 +9,8 @@ import '../../domain/models/track.dart';
 import '../../domain/models/playlist.dart';
 import '../../domain/models/page_data.dart';
 import '../../domain/models/artist.dart';
+import '../../domain/models/artist_detail.dart';
+import '../../domain/models/album.dart';
 
 /// Статусы загрузки для операций с музыкальными данными
 enum MusicLoadStatus { initial, loading, success, failure }
@@ -64,6 +66,15 @@ class MusicState extends Equatable {
   final List<Artist> recommendedArtists;
   final MusicLoadStatus recommendedArtistsStatus;
 
+  final ArtistDetail? currentArtist;
+  final MusicLoadStatus artistDetailsStatus;
+  final int artistTracksCurrentPage;
+  final bool artistTracksHasNextPage;
+  final List<Album> artistAlbums;
+  final MusicLoadStatus artistAlbumsStatus;
+  final List<Track> artistPopularTracks;
+  final MusicLoadStatus artistPopularTracksStatus;
+
   final List<Track> playedTracksHistory;
   final List<Track> searchResults;
   final MusicLoadStatus searchStatus;
@@ -102,6 +113,14 @@ class MusicState extends Equatable {
     this.vibeStatus = MusicLoadStatus.initial,
     this.recommendedArtists = const [],
     this.recommendedArtistsStatus = MusicLoadStatus.initial,
+    this.currentArtist,
+    this.artistDetailsStatus = MusicLoadStatus.initial,
+    this.artistTracksCurrentPage = 1,
+    this.artistTracksHasNextPage = false,
+    this.artistAlbums = const [],
+    this.artistAlbumsStatus = MusicLoadStatus.initial,
+    this.artistPopularTracks = const [],
+    this.artistPopularTracksStatus = MusicLoadStatus.initial,
     this.playedTracksHistory = const [],
     this.searchResults = const [],
     this.searchStatus = MusicLoadStatus.initial,
@@ -200,6 +219,14 @@ class MusicState extends Equatable {
     MusicLoadStatus? vibeStatus,
     List<Artist>? recommendedArtists,
     MusicLoadStatus? recommendedArtistsStatus,
+    ArtistDetail? currentArtist,
+    MusicLoadStatus? artistDetailsStatus,
+    int? artistTracksCurrentPage,
+    bool? artistTracksHasNextPage,
+    List<Album>? artistAlbums,
+    MusicLoadStatus? artistAlbumsStatus,
+    List<Track>? artistPopularTracks,
+    MusicLoadStatus? artistPopularTracksStatus,
     List<Track>? playedTracksHistory,
     List<Track>? searchResults,
     MusicLoadStatus? searchStatus,
@@ -236,6 +263,14 @@ class MusicState extends Equatable {
       vibeStatus: vibeStatus ?? this.vibeStatus,
       recommendedArtists: recommendedArtists ?? this.recommendedArtists,
       recommendedArtistsStatus: recommendedArtistsStatus ?? this.recommendedArtistsStatus,
+      currentArtist: currentArtist ?? this.currentArtist,
+      artistDetailsStatus: artistDetailsStatus ?? this.artistDetailsStatus,
+      artistTracksCurrentPage: artistTracksCurrentPage ?? this.artistTracksCurrentPage,
+      artistTracksHasNextPage: artistTracksHasNextPage ?? this.artistTracksHasNextPage,
+      artistAlbums: artistAlbums ?? this.artistAlbums,
+      artistAlbumsStatus: artistAlbumsStatus ?? this.artistAlbumsStatus,
+      artistPopularTracks: artistPopularTracks ?? this.artistPopularTracks,
+      artistPopularTracksStatus: artistPopularTracksStatus ?? this.artistPopularTracksStatus,
       playedTracksHistory: playedTracksHistory ?? this.playedTracksHistory,
       searchResults: searchResults ?? this.searchResults,
       searchStatus: searchStatus ?? this.searchStatus,
@@ -279,6 +314,14 @@ class MusicState extends Equatable {
     vibeStatus,
     recommendedArtists,
     recommendedArtistsStatus,
+    currentArtist,
+    artistDetailsStatus,
+    artistTracksCurrentPage,
+    artistTracksHasNextPage,
+    artistAlbums,
+    artistAlbumsStatus,
+    artistPopularTracks,
+    artistPopularTracksStatus,
     playedTracksHistory,
     searchResults,
     searchStatus,

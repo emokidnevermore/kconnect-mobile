@@ -4,7 +4,7 @@
 /// Может содержать кнопку для просмотра полного списка элементов секции.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../../../theme/app_text_styles.dart';
 
 /// Виджет заголовка секции с опциональной кнопкой действия
@@ -33,8 +33,12 @@ class SectionHeader extends StatelessWidget {
             style: AppTextStyles.h3,
           ),
           if (onSeeAll != null)
-            CupertinoButton(
-              padding: EdgeInsets.zero,
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               onPressed: onSeeAll,
               child: Text(
                 'Посмотреть всё',

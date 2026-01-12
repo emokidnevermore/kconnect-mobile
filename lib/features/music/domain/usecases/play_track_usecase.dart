@@ -22,21 +22,9 @@ class PlayTrackUseCase {
 
   Future<void> call(Track track) async {
     try {
-      final currentState = _audioRepository.currentState;
-      final isCurrentlyPlaying = _audioRepository.isPlaying;
-
-      if (currentState.currentTrack?.id == track.id && isCurrentlyPlaying) {
-        // Same track already playing - do nothing to avoid restart
-        return;
-      } else if (currentState.currentTrack?.id == track.id &&
-                 currentState.currentTrack != null &&
-                 currentState.position.inSeconds > 0) {
-        // Resume the currently paused track
-        await _audioRepository.resume();
-      } else {
-        // Start playing a new or different track
-        await _audioRepository.playTrack(track);
-      }
+      developer.log('PlayTrackUseCase: Starting play for ${track.title}', name: 'USECASE');
+      await _audioRepository.playTrack(track);
+      developer.log('PlayTrackUseCase: playTrack completed', name: 'USECASE');
     } catch (e, stackTrace) {
       developer.log('PlayTrackUseCase: Error playing track ${track.title}', name: 'USECASE', error: e, stackTrace: stackTrace);
       rethrow;

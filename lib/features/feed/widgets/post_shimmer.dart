@@ -6,7 +6,6 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
-import '../../../theme/app_colors.dart';
 
 /// Виджет для отображения shimmer-эффекта загрузки поста
 ///
@@ -18,13 +17,14 @@ class PostShimmer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Shimmer.fromColors(
-      baseColor: AppColors.bgCard,
-      highlightColor: AppColors.bgCard.withValues(alpha: 0.5),
+      baseColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+      highlightColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+      period: const Duration(milliseconds: 1200),
       child: Container(
       padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
       decoration: BoxDecoration(
-        color: AppColors.bgCard,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -38,7 +38,7 @@ class PostShimmer extends StatelessWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.bgCard,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
               ),
               const SizedBox(width: 10),
@@ -49,13 +49,13 @@ class PostShimmer extends StatelessWidget {
                     Container(
                       height: 16,
                       width: 100,
-                      color: AppColors.bgCard,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     const SizedBox(height: 4),
                     Container(
                       height: 12,
                       width: 80,
-                      color: AppColors.bgCard,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                   ],
                 ),
@@ -66,7 +66,7 @@ class PostShimmer extends StatelessWidget {
           // Контент
           Container(
             height: 60,
-            color: AppColors.bgCard,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
           const SizedBox(height: 8),
           // Статистика
@@ -75,20 +75,20 @@ class PostShimmer extends StatelessWidget {
               Container(
                 height: 20,
                 width: 40,
-                color: AppColors.bgCard,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Container(
                   height: 30,
-                  color: AppColors.bgCard,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
               ),
               const SizedBox(width: 12),
               Container(
                 height: 20,
                 width: 40,
-                color: AppColors.bgCard,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
               ),
             ],
           ),

@@ -3,7 +3,6 @@
 // Предоставляет функции для загрузки изображений с оптимизацией GIF,
 // кэшированием и аутентификацией для защищенных ресурсов.
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../services/api_client/dio_client.dart';
 
@@ -27,21 +26,24 @@ class ImageUtils {
   /// [placeholder] - виджет-заполнитель при загрузке
   /// [headers] - HTTP заголовки для запроса
   static Widget buildAlbumArt(
-    String? imageUrl, {
+    String? imageUrl,
+    BuildContext context, {
     required double width,
     required double height,
     BoxFit fit = BoxFit.cover,
     Widget? placeholder,
     Map<String, String>? headers,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
     if (imageUrl == null || imageUrl.isEmpty) {
       return Container(
         width: width,
         height: height,
-        color: Colors.grey.shade200,
-        child: const Icon(
+        color: colorScheme.surfaceContainerHighest,
+        child: Icon(
           Icons.music_note,
-          color: Colors.grey,
+          color: colorScheme.onSurfaceVariant,
         ),
       );
     }
@@ -51,43 +53,87 @@ class ImageUtils {
     final String finalUrl = imageUrl.toLowerCase().contains('.gif')
         ? '$imageUrl?static=true'
         : imageUrl;
+    
+    // Determine if auth is required
+    final requiresAuth = ImageUtils.requiresAuth(finalUrl);
+    
+    // If auth is required, we need to get headers asynchronously
+    if (requiresAuth && headers == null) {
+      return FutureBuilder<Map<String, String>>(
+        future: DioClient().getImageAuthHeaders(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Container(
+              width: width,
+              height: height,
+              color: colorScheme.surfaceContainerHighest,
+              child: placeholder ?? const CircularProgressIndicator(strokeWidth: 2),
+            );
+          }
+          return _buildCachedAlbumArt(
+            finalUrl,
+            context,
+            width: width,
+            height: height,
+            fit: fit,
+            placeholder: placeholder,
+            headers: snapshot.data ?? {},
+            colorScheme: colorScheme,
+          );
+        },
+      );
+    }
+    
+    return _buildCachedAlbumArt(
+      finalUrl,
+      context,
+      width: width,
+      height: height,
+      fit: fit,
+      placeholder: placeholder,
+      headers: headers ?? {},
+      colorScheme: colorScheme,
+    );
+  }
 
+  /// Вспомогательный метод для построения кэшированного изображения обложки
+  static Widget _buildCachedAlbumArt(
+    String imageUrl,
+    BuildContext context, {
+    required double width,
+    required double height,
+    required BoxFit fit,
+    Widget? placeholder,
+    required Map<String, String> headers,
+    required ColorScheme colorScheme,
+  }) {
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: Image.network(
-          finalUrl,
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
           fit: fit,
-          headers: headers,
-          gaplessPlayback: false, // Prevents re-animation on reload
-          // Stop GIF animation by showing only first frame
-          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-            // Only show the first frame, block all subsequent animated frames
-            if (frame == null || frame == 0) {
-              return child;
-            }
-            // Return the first frame container to prevent animation
-            // This effectively stops GIF from animating
-            return child;
-          },
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
-              color: Colors.grey.shade200,
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            return const Icon(
-              Icons.music_note,
-              color: Colors.grey,
-            );
-          },
+          httpHeaders: headers.isNotEmpty ? headers : null,
+          filterQuality: FilterQuality.low,
+          memCacheWidth: width.toInt() * 2,
+          memCacheHeight: height.toInt() * 2,
+          placeholder: (context, url) => placeholder ??
+              Container(
+                color: colorScheme.surfaceContainerHighest,
+                child: const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+          errorWidget: (context, url, error) => Icon(
+            Icons.music_note,
+            color: colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );
@@ -111,11 +157,13 @@ class ImageUtils {
   /// [fit] - режим масштабирования
   /// Returns: Future'<'Widget'>' настроенный виджет аватара
   static Future<Widget> buildChatAvatarImage(
-    String imageUrl, {
+    String imageUrl,
+    BuildContext context, {
     required double width,
     required double height,
     BoxFit fit = BoxFit.cover,
   }) async {
+    final colorScheme = Theme.of(context).colorScheme;
     final headers = requiresAuth(imageUrl) ? await DioClient().getImageAuthHeaders() : <String, String>{};
 
     return Container(
@@ -123,7 +171,7 @@ class ImageUtils {
       height: height,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.grey.shade200,
+        color: colorScheme.surfaceContainerHighest,
       ),
       child: ClipOval(
         child: CachedNetworkImage(
@@ -133,10 +181,10 @@ class ImageUtils {
           memCacheWidth: width.toInt() * 2,
           memCacheHeight: height.toInt() * 2,
           httpHeaders: headers,
-          placeholder: (context, url) => CupertinoActivityIndicator(radius: 8),
+          placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
           errorWidget: (context, url, error) => Icon(
-            CupertinoIcons.person,
-            color: CupertinoColors.systemGrey,
+            Icons.person,
+            color: colorScheme.onSurfaceVariant,
           ),
         ),
       ),

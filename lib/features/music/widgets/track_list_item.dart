@@ -5,11 +5,12 @@
 /// Используется в результатах поиска и истории прослушиваний.
 library;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/theme_extensions.dart';
+import '../../../services/cache/audio_preload_service.dart';
 import '../domain/models/track.dart';
 
 /// Виджет элемента списка треков
@@ -35,8 +36,26 @@ class TrackListItem extends StatefulWidget {
 }
 
 class _TrackListItemState extends State<TrackListItem> with AutomaticKeepAliveClientMixin {
+  final AudioPreloadService _preloadService = AudioPreloadService.instance;
+  bool _hasPreloaded = false;
+
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Предзагружаем трек при создании виджета
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_hasPreloaded) {
+        _preloadService.preloadTrack(
+          widget.track,
+          priority: PreloadPriority.visible,
+        );
+        _hasPreloaded = true;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +69,7 @@ class _TrackListItemState extends State<TrackListItem> with AutomaticKeepAliveCl
             // Обложка
             ImageUtils.buildAlbumArt(
               ImageUtils.getCompleteImageUrl(widget.track.coverPath),
+              context,
               width: 60,
               height: 60,
               fit: BoxFit.cover,
@@ -91,11 +111,12 @@ class _TrackListItemState extends State<TrackListItem> with AutomaticKeepAliveCl
             // Кнопка лайка
             if (widget.showLikeButton) ...[
               const SizedBox(width: 12),
-              CupertinoButton(
+              IconButton(
                 padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
                 onPressed: widget.onLike,
-                child: Icon(
-                  widget.track.isLiked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
+                icon: Icon(
+                  widget.track.isLiked ? Icons.favorite : Icons.favorite_border,
                   size: 20,
                   color: widget.track.isLiked ? context.dynamicPrimaryColor : AppColors.textSecondary,
                 ),

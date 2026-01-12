@@ -7,13 +7,16 @@ library;
 
 import 'dart:ui';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kconnect_mobile/core/utils/date_format.dart';
+import 'package:kconnect_mobile/core/widgets/staggered_list_item.dart';
+import 'package:kconnect_mobile/core/widgets/custom_refresh_indicator.dart';
 import 'package:kconnect_mobile/core/utils/theme_extensions.dart';
-import 'package:kconnect_mobile/theme/app_colors.dart';
+import 'package:kconnect_mobile/core/widgets/authorized_cached_network_image.dart';
 import 'package:kconnect_mobile/features/profile/components/swipe_pop_container.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:kconnect_mobile/theme/app_text_styles.dart';
 
 import '../../data/models/notification_model.dart';
 import '../bloc/notifications_bloc.dart';
@@ -37,13 +40,28 @@ class NotificationsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 250),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+      duration: const Duration(milliseconds: 300), // Material 3 standard duration
+      switchInCurve: Curves.easeOutCubic, // Material 3 emphasized easing
+      switchOutCurve: Curves.decelerate, // Material 3 decelerate easing
       child: isVisible
-          ? SwipePopContainer(
-              onPop: onClose,
-              child: _NotificationsPanel(onClose: onClose),
+          ? Stack(
+              children: [
+                // Панель с blur эффектом
+                SwipePopContainer(
+                  onPop: onClose,
+                  child: _NotificationsPanel(onClose: onClose),
+                ),
+                // Хедер полностью вне панели (вне blur эффекта)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: SafeArea(
+                    bottom: false,
+                    child: _NotificationsHeader(onClose: onClose),
+                  ),
+                ),
+              ],
             )
           : const SizedBox.shrink(),
     );
@@ -67,21 +85,19 @@ class _NotificationsPanel extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
         child: Container(
-          color: AppColors.bgDark.withValues(alpha: 0.9),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: DefaultTextStyle(
-            style: theme.bodyMedium?.copyWith(color: AppColors.textPrimary) ?? const TextStyle(color: AppColors.textPrimary),
+            style: theme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface) ?? TextStyle(color: Theme.of(context).colorScheme.onSurface),
             child: SafeArea(
               bottom: false,
-              child: Column(
-                children: [
-                  const SizedBox(height: 4),
-                  Expanded(
-                    child: BlocBuilder<NotificationsBloc, NotificationsState>(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 40),
+                child: BlocBuilder<NotificationsBloc, NotificationsState>(
                       builder: (context, state) {
                         if (state.status == NotificationsStatus.loading) {
                           return const Center(
-                            child: CupertinoActivityIndicator(),
+                            child: CircularProgressIndicator(),
                           );
                         }
 
@@ -89,13 +105,13 @@ class _NotificationsPanel extends StatelessWidget {
                           return Center(
                             child: Text(
                               'Нет уведомлений',
-                              style: theme.bodyMedium?.copyWith(color: AppColors.textSecondary) ??
-                                  const TextStyle(color: AppColors.textSecondary),
+                              style: theme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant) ??
+                                  TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                             ),
                           );
                         }
 
-                        return RefreshIndicator.adaptive(
+                        return CustomRefreshIndicator(
                           onRefresh: () async {
                             context.read<NotificationsBloc>().add(const NotificationsRefreshed());
                           },
@@ -103,7 +119,10 @@ class _NotificationsPanel extends StatelessWidget {
                             physics: const AlwaysScrollableScrollPhysics(),
                             itemBuilder: (context, index) {
                               final item = state.notifications[index];
-                              return _NotificationTile(item: item, theme: theme, onClose: onClose);
+                              return StaggeredListItem(
+                                index: index,
+                                child: _NotificationTile(item: item, theme: theme, onClose: onClose),
+                              );
                             },
                             separatorBuilder: (_, _) => const SizedBox(height: 8),
                             itemCount: state.notifications.length,
@@ -112,13 +131,11 @@ class _NotificationsPanel extends StatelessWidget {
                       },
                     ),
                   ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
-      ),
-    );
+        );
   }
 }
 
@@ -145,7 +162,7 @@ class _NotificationTileState extends State<_NotificationTile> {
     final bloc = context.read<NotificationsBloc>();
 
     final backgroundColor = widget.item.isRead
-        ? AppColors.bgDark.withValues(alpha: 0.6)
+        ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.6)
         : context.dynamicPrimaryColor.withValues(alpha: 0.12);
     final icon = _notificationIcon(widget.item.type, widget.item.contentType);
 
@@ -189,17 +206,17 @@ class _NotificationTileState extends State<_NotificationTile> {
         },
         background: Container(
           decoration: BoxDecoration(
-            color: AppColors.textSecondary.withValues(alpha: 0.2),
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(12),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16),
           alignment: Alignment.centerRight,
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Text('Отметить прочитанным', style: TextStyle(color: AppColors.textPrimary)),
+              Text('Отметить прочитанным', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
               SizedBox(width: 8),
-              Icon(CupertinoIcons.check_mark_circled, color: AppColors.textPrimary),
+              Icon(Icons.check_circle, color: Theme.of(context).colorScheme.onSurface),
             ],
           ),
         ),
@@ -208,7 +225,7 @@ class _NotificationTileState extends State<_NotificationTile> {
             color: backgroundColor,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: AppColors.textSecondary.withValues(alpha: 0.08),
+              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.08),
             ),
           ),
           padding: const EdgeInsets.all(12),
@@ -234,7 +251,7 @@ class _NotificationTileState extends State<_NotificationTile> {
                                 child: Text(
                                   _buildTitle(widget.item),
                                   style: (widget.theme?.titleSmall ?? const TextStyle()).copyWith(
-                                        color: AppColors.textPrimary,
+                                        color: Theme.of(context).colorScheme.onSurface,
                                         fontWeight: FontWeight.w600,
                                       ),
                                 ),
@@ -246,7 +263,7 @@ class _NotificationTileState extends State<_NotificationTile> {
                         Text(
                           formatNotificationDate(widget.item.createdAt),
                           style: (widget.theme?.bodySmall ?? const TextStyle()).copyWith(
-                                color: AppColors.textSecondary,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
                         ),
                       ],
@@ -255,7 +272,7 @@ class _NotificationTileState extends State<_NotificationTile> {
                     Text(
                       widget.item.message,
                       style: (widget.theme?.bodyMedium ?? const TextStyle()).copyWith(
-                            color: AppColors.textPrimary,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                     ),
                     if (widget.item.commentContent != null && widget.item.commentContent!.isNotEmpty) ...[
@@ -285,16 +302,16 @@ class _NotificationTileState extends State<_NotificationTile> {
   IconData? _notificationIcon(String type, String contentType) {
     switch (type) {
       case 'post_like':
-        return CupertinoIcons.heart_fill;
+        return Icons.favorite;
       case 'comment':
-        return CupertinoIcons.chat_bubble_text_fill;
+        return Icons.comment;
       case 'follow':
-        return CupertinoIcons.person_crop_circle_badge_checkmark;
+        return Icons.person_add;
       case 'gift_received':
-        return CupertinoIcons.gift;
+        return Icons.card_giftcard;
       default:
-        if (contentType == 'comment') return CupertinoIcons.chat_bubble_text;
-        if (contentType == 'post') return CupertinoIcons.heart;
+        if (contentType == 'comment') return Icons.comment_outlined;
+        if (contentType == 'post') return Icons.favorite_border;
         return null;
     }
   }
@@ -313,11 +330,11 @@ class _Avatar extends StatelessWidget {
         height: 40,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: AppColors.textSecondary.withValues(alpha: 0.2),
+          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
         ),
-        child: const Icon(
-          CupertinoIcons.bell,
-          color: AppColors.textPrimary,
+        child: Icon(
+          Icons.notifications_outlined,
+          color: Theme.of(context).colorScheme.onSurface,
           size: 20,
         ),
       );
@@ -325,22 +342,25 @@ class _Avatar extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
-      child: Image.network(
-        avatarUrl!,
+      child: AuthorizedCachedNetworkImage(
+        imageUrl: avatarUrl!,
         width: 40,
         height: 40,
         fit: BoxFit.cover,
-        errorBuilder: (_, _, _) {
+        filterQuality: FilterQuality.low,
+        memCacheWidth: 80,
+        memCacheHeight: 80,
+        errorWidget: (_, _, _) {
           return Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.textSecondary.withValues(alpha: 0.2),
+              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
             ),
-            child: const Icon(
-              CupertinoIcons.bell,
-              color: AppColors.textPrimary,
+            child: Icon(
+              Icons.notifications_outlined,
+              color: Theme.of(context).colorScheme.onSurface,
               size: 20,
             ),
           );
@@ -361,15 +381,82 @@ class _PreviewChip extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.bgDark.withValues(alpha: 0.7),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         text,
-        style: const TextStyle(
-          color: AppColors.textSecondary,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
           fontSize: 12,
         ),
+      ),
+    );
+  }
+}
+
+/// Хедер панели уведомлений в стиле AppHeader
+class _NotificationsHeader extends StatelessWidget {
+  final VoidCallback onClose;
+
+  const _NotificationsHeader({required this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.transparent,
+      child: Row(
+        children: [
+          // Логотип и название "Уведомления" в отдельной карточке
+          Card(
+            margin: EdgeInsets.zero,
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SvgPicture.asset(
+                    'lib/assets/icons/logo.svg',
+                    height: 20,
+                    width: 20,
+                    colorFilter: ColorFilter.mode(context.dynamicPrimaryColor, BlendMode.srcIn),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Уведомления',
+                    style: AppTextStyles.postAuthor.copyWith(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Spacer(),
+          // Кнопка закрытия в отдельной карточке
+          Card(
+            margin: EdgeInsets.zero,
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: onClose,
+                icon: Icon(
+                  Icons.close,
+                  color: context.dynamicPrimaryColor,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

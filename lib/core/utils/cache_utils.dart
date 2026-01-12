@@ -2,9 +2,12 @@
 ///
 /// Предоставляет функции для очистки кеша изображений Flutter
 /// и получения информации о размере кеша.
+/// Интегрирован с GlobalCacheService для централизованного управления.
 library;
 
 import 'package:flutter/material.dart';
+import '../../services/cache/global_cache_service.dart';
+import '../../services/cache/cache_category.dart';
 
 /// Утилиты для управления кешем изображений Flutter
 class CacheUtils {
@@ -12,10 +15,11 @@ class CacheUtils {
   ///
   /// Удаляет все закешированные изображения и живые изображения из памяти.
   /// Используется при переключении аккаунтов или для освобождения памяти.
-  static void clearImageCache() {
+  /// Теперь использует GlobalCacheService для централизованного управления.
+  static Future<void> clearImageCache() async {
     try {
-      imageCache.clear();
-      imageCache.clearLiveImages();
+      final cacheService = GlobalCacheService();
+      await cacheService.clearCache([CacheCategory.images]);
     } catch (e) {
       // Handle error silently
     }

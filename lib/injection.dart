@@ -18,6 +18,7 @@ import 'features/feed/domain/usecases/fetch_posts_usecase.dart';
 import 'features/feed/data/repositories/feed_repository_impl.dart';
 import 'features/feed/presentation/blocs/feed_bloc.dart';
 import 'features/music/data/repositories/audio_repository_impl.dart';
+import 'features/music/domain/repositories/audio_repository.dart';
 import 'features/music/data/repositories/music_repository_impl.dart';
 import 'features/music/domain/usecases/play_track_usecase.dart';
 import 'features/music/domain/usecases/pause_usecase.dart';
@@ -52,6 +53,7 @@ import 'features/post_creation/data/repositories/post_repository_impl.dart';
 import 'features/post_creation/domain/repositories/post_repository.dart';
 import 'features/post_creation/domain/usecases/create_post_usecase.dart';
 import 'features/post_creation/presentation/blocs/post_creation_bloc.dart';
+import 'features/feed/domain/usecases/block_user_usecase.dart';
 
 final GetIt locator = GetIt.instance;
 
@@ -78,7 +80,9 @@ void setupLocator() {
   locator.registerLazySingleton<AccountRepositoryImpl>(() => AccountRepositoryImpl());
   locator.registerLazySingleton<FeedRepositoryImpl>(() => FeedRepositoryImpl(locator<PostsService>()));
   locator.registerLazySingleton<UsersRepositoryImpl>(() => UsersRepositoryImpl(locator<UsersService>()));
+  locator.registerLazySingleton<UserBlockRepositoryImpl>(() => UserBlockRepositoryImpl(locator<UsersService>()));
   locator.registerLazySingleton<AudioRepositoryImpl>(() => AudioRepositoryImpl());
+  locator.registerLazySingleton<AudioRepository>(() => locator<AudioRepositoryImpl>());
   locator.registerLazySingleton<MusicRepositoryImpl>(() => MusicRepositoryImpl(locator<MusicService>()));
   locator.registerLazySingleton<ProfileRepositoryImpl>(() => ProfileRepositoryImpl.create());
   locator.registerLazySingleton<MessagesRepositoryImpl>(() => MessagesRepositoryImpl(locator<MessagesService>()));
@@ -104,6 +108,7 @@ void setupLocator() {
   locator.registerFactory<AddCommentUseCase>(() => AddCommentUseCase(locator<FeedRepositoryImpl>()));
   locator.registerFactory<DeleteCommentUseCase>(() => DeleteCommentUseCase(locator<FeedRepositoryImpl>()));
   locator.registerFactory<LikeCommentUseCase>(() => LikeCommentUseCase(locator<FeedRepositoryImpl>()));
+  locator.registerFactory<VotePollUseCase>(() => VotePollUseCase(locator<FeedRepositoryImpl>()));
   locator.registerFactory<PlayTrackUseCase>(() => PlayTrackUseCase(locator<AudioRepositoryImpl>(), locator<MusicRepositoryImpl>()));
   locator.registerFactory<PauseUseCase>(() => PauseUseCase(locator<AudioRepositoryImpl>()));
   locator.registerFactory<SeekUseCase>(() => SeekUseCase(locator<AudioRepositoryImpl>()));
@@ -117,6 +122,11 @@ void setupLocator() {
   locator.registerFactory<FetchGalleryMediaUsecase>(() => FetchGalleryMediaUsecase(locator<MediaRepositoryImpl>()));
   locator.registerFactory<RequestMediaPermissionsUsecase>(() => RequestMediaPermissionsUsecase(locator<MediaRepositoryImpl>()));
   locator.registerFactory<CreatePostUsecase>(() => CreatePostUsecase(locator<PostRepositoryImpl>()));
+  locator.registerFactory<BlockUserUseCase>(() => BlockUserUseCase(locator<UserBlockRepositoryImpl>()));
+  locator.registerFactory<UnblockUserUseCase>(() => UnblockUserUseCase(locator<UserBlockRepositoryImpl>()));
+  locator.registerFactory<CheckBlockStatusUseCase>(() => CheckBlockStatusUseCase(locator<UserBlockRepositoryImpl>()));
+  locator.registerFactory<GetBlockedUsersUseCase>(() => GetBlockedUsersUseCase(locator<UserBlockRepositoryImpl>()));
+  locator.registerFactory<GetBlacklistStatsUseCase>(() => GetBlacklistStatsUseCase(locator<UserBlockRepositoryImpl>()));
 
   // Blocs
   locator.registerLazySingleton<ThemeBloc>(() => ThemeBloc()..add(LoadThemeEvent()));
@@ -147,6 +157,7 @@ void setupLocator() {
         locator<AddCommentUseCase>(),
         locator<DeleteCommentUseCase>(),
         locator<LikeCommentUseCase>(),
+        locator<VotePollUseCase>(),
         locator<AuthBloc>(),
       ));
   locator.registerFactory<PlaybackBloc>(() => PlaybackBloc(

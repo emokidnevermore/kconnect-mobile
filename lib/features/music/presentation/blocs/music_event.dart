@@ -124,6 +124,36 @@ class MusicRecommendedArtistsFetched extends MusicEvent {
   List<Object?> get props => [forceRefresh];
 }
 
+class MusicArtistDetailsFetched extends MusicEvent {
+  const MusicArtistDetailsFetched(this.artistId, {this.page = 1, this.forceRefresh = false});
+
+  final int artistId;
+  final int page;
+  final bool forceRefresh;
+
+  @override
+  List<Object?> get props => [artistId, page, forceRefresh];
+}
+
+class MusicArtistTracksLoadMore extends MusicEvent {
+  const MusicArtistTracksLoadMore(this.artistId);
+
+  final int artistId;
+
+  @override
+  List<Object?> get props => [artistId];
+}
+
+class MusicArtistAlbumsFetched extends MusicEvent {
+  const MusicArtistAlbumsFetched(this.artistId, {this.forceRefresh = false});
+
+  final int artistId;
+  final bool forceRefresh;
+
+  @override
+  List<Object?> get props => [artistId, forceRefresh];
+}
+
 class MusicTrackLiked extends MusicEvent {
   const MusicTrackLiked(this.trackId, this.track);
 

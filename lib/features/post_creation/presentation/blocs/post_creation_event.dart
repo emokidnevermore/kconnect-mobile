@@ -42,11 +42,12 @@ class RemoveImageEvent extends PostCreationEvent {
 /// Событие добавления видео
 class AddVideoEvent extends PostCreationEvent {
   final String videoPath;
+  final String? videoThumbnailPath;
 
-  const AddVideoEvent(this.videoPath);
+  const AddVideoEvent(this.videoPath, {this.videoThumbnailPath});
 
   @override
-  List<Object?> get props => [videoPath];
+  List<Object?> get props => [videoPath, videoThumbnailPath];
 }
 
 /// Событие удаления видео
@@ -107,4 +108,85 @@ class LoadDraftEvent extends PostCreationEvent {
 /// Событие очистки формы
 class ClearFormEvent extends PostCreationEvent {
   const ClearFormEvent();
+}
+
+/// Событие сброса состояния при входе в экран
+class ResetStateEvent extends PostCreationEvent {
+  const ResetStateEvent();
+}
+
+/// Событие переключения формы опроса
+class TogglePollFormEvent extends PostCreationEvent {
+  const TogglePollFormEvent();
+}
+
+/// Событие обновления вопроса опроса
+class UpdatePollQuestionEvent extends PostCreationEvent {
+  final String question;
+
+  const UpdatePollQuestionEvent(this.question);
+
+  @override
+  List<Object?> get props => [question];
+}
+
+/// Событие добавления варианта ответа
+class AddPollOptionEvent extends PostCreationEvent {
+  final String option;
+
+  const AddPollOptionEvent(this.option);
+
+  @override
+  List<Object?> get props => [option];
+}
+
+/// Событие удаления варианта ответа
+class RemovePollOptionEvent extends PostCreationEvent {
+  final int index;
+
+  const RemovePollOptionEvent(this.index);
+
+  @override
+  List<Object?> get props => [index];
+}
+
+/// Событие обновления варианта ответа
+class UpdatePollOptionEvent extends PostCreationEvent {
+  final int index;
+  final String option;
+
+  const UpdatePollOptionEvent(this.index, this.option);
+
+  @override
+  List<Object?> get props => [index, option];
+}
+
+/// Событие переключения анонимности опроса
+class TogglePollAnonymousEvent extends PostCreationEvent {
+  final bool isAnonymous;
+
+  const TogglePollAnonymousEvent(this.isAnonymous);
+
+  @override
+  List<Object?> get props => [isAnonymous];
+}
+
+/// Событие переключения множественного выбора
+class TogglePollMultipleEvent extends PostCreationEvent {
+  final bool isMultiple;
+
+  const TogglePollMultipleEvent(this.isMultiple);
+
+  @override
+  List<Object?> get props => [isMultiple];
+}
+
+/// Событие обновления срока окончания опроса
+class UpdatePollExpiresInDaysEvent extends PostCreationEvent {
+  final int? days;
+
+  const UpdatePollExpiresInDaysEvent(this.days);
+
+  @override
+  List<Object?> get props => [days];
 }

@@ -87,3 +87,26 @@ class LikeCommentEvent extends FeedEvent {
   @override
   List<Object?> get props => [commentId];
 }
+
+/// Событие голосования в опросе
+class VotePollEvent extends FeedEvent {
+  /// ID поста, содержащего опрос
+  final int postId;
+
+  /// ID опроса
+  final int pollId;
+
+  /// Список ID выбранных вариантов ответа
+  final List<int> optionIds;
+
+  /// Флаг множественного выбора
+  final bool isMultipleChoice;
+
+  /// Флаг наличия существующих голосов
+  final bool hasExistingVotes;
+
+  const VotePollEvent(this.postId, this.pollId, this.optionIds, {this.isMultipleChoice = false, this.hasExistingVotes = false});
+
+  @override
+  List<Object?> get props => [postId, pollId, optionIds, isMultipleChoice, hasExistingVotes];
+}

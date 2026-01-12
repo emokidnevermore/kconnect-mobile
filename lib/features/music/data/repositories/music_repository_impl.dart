@@ -12,6 +12,8 @@ import '../../domain/repositories/music_repository.dart';
 import '../../domain/models/track.dart';
 import '../../domain/models/playlist.dart';
 import '../../domain/models/artist.dart';
+import '../../domain/models/artist_detail.dart';
+import '../../domain/models/album.dart';
 
 /// Реализация музыкального репозитория
 class MusicRepositoryImpl implements MusicRepository {
@@ -37,6 +39,16 @@ class MusicRepositoryImpl implements MusicRepository {
   @override
   Future<List<Artist>> fetchRecommendedArtists() async {
     return await _musicService.fetchRecommendedArtists();
+  }
+
+  @override
+  Future<ArtistDetail> fetchArtistDetails(int artistId, {int page = 1, int perPage = 40}) async {
+    return await _musicService.fetchArtistDetails(artistId, page: page, perPage: perPage);
+  }
+
+  @override
+  Future<List<Album>> fetchArtistAlbums(int artistId) async {
+    return await _musicService.fetchArtistAlbums(artistId);
   }
 
   @override

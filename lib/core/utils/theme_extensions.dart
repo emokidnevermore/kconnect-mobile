@@ -15,7 +15,7 @@ extension ThemeExtensions on BuildContext {
   Color get dynamicPrimaryColor {
     final themeState = read<ThemeBloc>().state;
     if (themeState is ThemeLoaded) {
-      return themeState.primaryColor;
+      return themeState.colorScheme.primary;
     }
     // Fallback to default color
     return const Color(0xFFD0BCFF);
@@ -30,10 +30,21 @@ extension ThemeExtensions on BuildContext {
   /// Возвращает начальный цвет динамического градиента (более насыщенный)
   ///
   /// Получает цвет из состояния ThemeBloc или возвращает цвет по умолчанию.
+  /// Для дефолтной темы использует брендовый цвет, для пользовательских - использует primaryContainer.
   Color get dynamicGradientStart {
     final themeState = read<ThemeBloc>().state;
     if (themeState is ThemeLoaded) {
-      return themeState.accentColor.shade700; // More saturated shade for start
+      final colorScheme = themeState.colorScheme;
+      // Проверяем, является ли тема дефолтной (брендовой)
+      final isDefaultTheme = colorScheme.primary.toARGB32() == 0xFFD0BCFF;
+      
+      if (isDefaultTheme) {
+        // Дефолтная тема: используем брендовый цвет
+        return const Color(0xFFB69DF8);
+      } else {
+        // Пользовательская тема: используем primaryContainer
+        return colorScheme.primaryContainer;
+      }
     }
     // Fallback to default gradient start
     return const Color(0xFFB69DF8);
@@ -42,10 +53,21 @@ extension ThemeExtensions on BuildContext {
   /// Возвращает конечный цвет динамического градиента
   ///
   /// Получает цвет из состояния ThemeBloc или возвращает цвет по умолчанию.
+  /// Для дефолтной темы использует брендовый цвет, для пользовательских - основной цвет темы.
   Color get dynamicGradientEnd {
     final themeState = read<ThemeBloc>().state;
     if (themeState is ThemeLoaded) {
-      return themeState.accentColor;
+      final colorScheme = themeState.colorScheme;
+      // Проверяем, является ли тема дефолтной (брендовой)
+      final isDefaultTheme = colorScheme.primary.toARGB32() == 0xFFD0BCFF;
+      
+      if (isDefaultTheme) {
+        // Дефолтная тема: используем брендовый цвет
+        return const Color(0xFFD0BCFF);
+      } else {
+        // Пользовательская тема: используем основной цвет
+        return colorScheme.primary;
+      }
     }
     // Fallback to default gradient end
     return const Color(0xFFD0BCFF);
@@ -60,6 +82,19 @@ extension ThemeExtensions on BuildContext {
         dynamicGradientStart,
         dynamicGradientEnd,
       ],
+    );
+  }
+
+  /// Возвращает ColorScheme из темы (для удобства)
+  ColorScheme get colorScheme {
+    final themeState = read<ThemeBloc>().state;
+    if (themeState is ThemeLoaded) {
+      return themeState.colorScheme;
+    }
+    // Fallback to default color scheme
+    return ColorScheme.fromSeed(
+      seedColor: const Color(0xFFD0BCFF),
+      brightness: Brightness.dark,
     );
   }
 }

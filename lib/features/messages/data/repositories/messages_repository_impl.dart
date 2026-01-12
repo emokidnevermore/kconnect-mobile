@@ -32,12 +32,20 @@ class MessagesRepositoryImpl implements MessagesRepository {
     return await _messagesService.createChat(userId, encrypted: encrypted);
   }
 
+  /// Создает новый групповой чат
+  ///
+  /// Делегирует вызов сервису для создания группового чата
+  @override
+  Future<int> createGroupChat(String title, List<int> userIds) async {
+    return await _messagesService.createGroupChat(title, userIds);
+  }
+
   /// Получает сообщения чата
   ///
-  /// Делегирует вызов сервису для получения всех сообщений указанного чата
+  /// Делегирует вызов сервису для получения сообщений указанного чата
   @override
-  Future<List<Message>> fetchMessages(int chatId) async {
-    return await _messagesService.fetchMessages(chatId);
+  Future<List<Message>> fetchMessages(int chatId, {int? beforeId}) async {
+    return await _messagesService.fetchMessages(chatId, beforeId: beforeId);
   }
 
   /// Отправляет сообщение в чат
@@ -54,5 +62,59 @@ class MessagesRepositoryImpl implements MessagesRepository {
   @override
   Future<int> markChatAsRead(int chatId) async {
     return await _messagesService.markChatAsRead(chatId);
+  }
+
+  /// Загружает медиа-файл в чат
+  ///
+  /// Делегирует вызов сервису для загрузки медиа-файла
+  @override
+  Future<Message> uploadMedia({
+    required int chatId,
+    required String filePath,
+    required String messageType,
+    int? replyToId,
+  }) async {
+    return await _messagesService.uploadMedia(
+      chatId: chatId,
+      filePath: filePath,
+      messageType: messageType,
+      replyToId: replyToId,
+    );
+  }
+
+  /// Загружает медиа-файл через Base64
+  ///
+  /// Делегирует вызов сервису для загрузки медиа-файла через Base64
+  @override
+  Future<Message> uploadMediaBase64({
+    required int chatId,
+    required String type,
+    required String filename,
+    required String base64Data,
+    int? replyToId,
+  }) async {
+    return await _messagesService.uploadMediaBase64(
+      chatId: chatId,
+      type: type,
+      filename: filename,
+      base64Data: base64Data,
+      replyToId: replyToId,
+    );
+  }
+
+  /// Редактирует сообщение
+  ///
+  /// Делегирует вызов сервису для редактирования сообщения
+  @override
+  Future<Message> editMessage(int chatId, int messageId, String content) async {
+    return await _messagesService.editMessage(chatId, messageId, content);
+  }
+
+  /// Удаляет сообщение
+  ///
+  /// Делегирует вызов сервису для удаления сообщения
+  @override
+  Future<void> deleteMessage(int chatId, int messageId) async {
+    return await _messagesService.deleteMessage(chatId, messageId);
   }
 }
