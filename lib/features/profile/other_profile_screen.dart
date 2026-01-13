@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -5,6 +7,9 @@ import '../../../theme/app_text_styles.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_bloc.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_event.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_state.dart';
+import 'package:kconnect_mobile/features/messages/presentation/blocs/messages_bloc.dart';
+import 'package:kconnect_mobile/features/messages/presentation/blocs/messages_event.dart';
+import 'package:kconnect_mobile/features/messages/chat_screen.dart';
 import 'components/profile_background.dart';
 import 'components/profile_content_card.dart';
 import 'components/profile_posts_section.dart';
@@ -76,6 +81,68 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> with AutomaticK
       return currentState.posts.length + (currentState.pinnedPost != null ? 1 : 0);
     }
     return null;
+  }
+
+  /// Обработка нажатия кнопки сообщения
+  void _handleMessageButtonPressed(UserProfile profile) {
+    final messagesBloc = context.read<MessagesBloc>();
+    final messagesState = messagesBloc.state;
+
+    // Ищем существующий личный чат с этим пользователем
+    dynamic existingChat;
+    try {
+      existingChat = messagesState.chats.firstWhere(
+        (chat) =>
+            !chat.isGroup &&
+            chat.members.any((member) => member.userId == profile.id),
+      );
+    } catch (e) {
+      existingChat = null;
+    }
+
+    if (existingChat != null) {
+      // Чат существует, переходим к нему
+      _navigateToChat(existingChat);
+    } else {
+      // Чата нет, создаем новый
+      messagesBloc.add(CreateChatEvent(userId: profile.id));
+
+      // Подписываемся на изменения состояния для перехода к созданному чату
+      StreamSubscription? subscription;
+      subscription = messagesBloc.stream.listen((state) {
+        // Ищем вновь созданный чат
+        dynamic newChat;
+        try {
+          newChat = state.chats.firstWhere(
+            (chat) =>
+                !chat.isGroup &&
+                chat.members.any((member) => member.userId == profile.id),
+          );
+        } catch (e) {
+          newChat = null;
+        }
+
+        if (newChat != null) {
+          // Чат найден, переходим к нему и отменяем подписку
+          _navigateToChat(newChat);
+          subscription?.cancel();
+        }
+      });
+
+      // Отменяем подписку через таймаут, чтобы избежать утечек памяти
+      Future.delayed(const Duration(seconds: 10), () {
+        subscription?.cancel();
+      });
+    }
+  }
+
+  /// Переход к экрану чата
+  void _navigateToChat(dynamic chat) {
+    Navigator.of(context).push(
+      CupertinoPageRoute(
+        builder: (context) => ChatScreen(chat: chat),
+      ),
+    );
   }
 
   @override
@@ -303,9 +370,7 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> with AutomaticK
               child: IconButton(
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
-                onPressed: () {
-                  // TODO: Реализовать логику отправки сообщения
-                },
+                onPressed: () => _handleMessageButtonPressed(profile),
                 icon: Icon(
                   Icons.chat_bubble_outline,
                   color: shouldUseBlackIcon ? Colors.black : Colors.white,

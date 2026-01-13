@@ -104,6 +104,26 @@ class FeedRepositoryImpl implements FeedRepository {
     }
   }
 
+  /// Добавляет ответ на комментарий
+  ///
+  /// Отправляет запрос на создание ответа на комментарий.
+  /// Возвращает созданный объект Comment.
+  ///
+  /// [commentId] - ID комментария, на который добавляется ответ
+  /// [content] - текст ответа
+  /// [parentReplyId] - ID родительского ответа (для вложенных ответов)
+  /// Returns: Созданный объект Comment
+  /// Throws: Exception при ошибке добавления ответа
+  @override
+  Future<Comment> addReply(int commentId, String content, {int? parentReplyId}) async {
+    try {
+      final data = await _postsService.addReply(commentId, content, parentReplyId: parentReplyId);
+      return Comment.fromJson(data['reply'] as Map<String, dynamic>);
+    } catch (e) {
+      throw Exception('Не удалось добавить ответ на комментарий: $e');
+    }
+  }
+
   /// Удаляет комментарий
   ///
   /// Отправляет запрос на удаление комментария по его ID.

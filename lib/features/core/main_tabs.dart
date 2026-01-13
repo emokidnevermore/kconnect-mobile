@@ -31,6 +31,8 @@ import 'package:kconnect_mobile/core/theme/presentation/blocs/theme_bloc.dart';
 import 'package:kconnect_mobile/core/theme/presentation/blocs/theme_event.dart';
 import 'package:kconnect_mobile/services/storage_service.dart';
 import 'package:kconnect_mobile/features/music/widgets/mini_player.dart';
+import 'package:kconnect_mobile/features/music/widgets/full_screen_player.dart';
+import 'package:kconnect_mobile/features/music/widgets/full_screen_search.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:kconnect_mobile/services/audio_service_manager.dart';
@@ -148,10 +150,7 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
     _musicSectionController.value = MusicSection.home;
   }
 
-  void _onMusicSearchBack() {
-    _onTabTapped(1);
-    _musicSectionController.value = MusicSection.home;
-  }
+
 
   void _onMusicArtistBack() {
     _onTabTapped(1);
@@ -210,8 +209,11 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
   }
 
   void _onMusicSearchPressed() {
-    _onTabTapped(1);
-    _musicSectionController.value = MusicSection.search;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const FullScreenSearch(),
+      ),
+    );
   }
 
   void _showAccountMenu() {
@@ -305,9 +307,7 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
                 _onNotificationClose();
                 return;
               }
-              if (_currentIndexNotifier.value == 1 && _musicSectionController.value == MusicSection.search) {
-                _musicSectionController.value = MusicSection.home;
-              } else if (_currentIndexNotifier.value == 1 && _musicSectionController.value != MusicSection.home) {
+              if (_currentIndexNotifier.value == 1 && _musicSectionController.value != MusicSection.home) {
                 _musicSectionController.value = MusicSection.home;
               }
             }
@@ -354,8 +354,8 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
                               onMusicPlaylistsBack: (currentIndex == 1 && currentSection == MusicSection.playlists) ? _onMusicPlaylistsBack : null,
                               isInMusicAllTracksSection: currentIndex == 1 && currentSection == MusicSection.allTracks,
                               onMusicAllTracksBack: (currentIndex == 1 && currentSection == MusicSection.allTracks) ? _onMusicAllTracksBack : null,
-                              isInMusicSearchSection: currentIndex == 1 && currentSection == MusicSection.search,
-                              onMusicSearchBack: (currentIndex == 1 && currentSection == MusicSection.search) ? _onMusicSearchBack : null,
+                              isInMusicSearchSection: false,
+                              onMusicSearchBack: null,
                             isInMusicArtistSection: currentIndex == 1 && currentSection == MusicSection.artist,
                             onMusicArtistBack: (currentIndex == 1 && currentSection == MusicSection.artist) ? _onMusicArtistBack : null,
                             artistNameWidget: (currentIndex == 1 && currentSection == MusicSection.artist) 
@@ -439,7 +439,11 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
                           );
                         },
                       ),
-                      MiniPlayer(onMusicTabTap: () => _onTabTapped(1), onTabBarToggle: _onTabBarToggle),
+                      MiniPlayer(
+                        onMusicTabTap: () => _onTabTapped(1),
+                        onTabBarToggle: _onTabBarToggle,
+                        onFullScreenTap: _openFullScreenPlayer,
+                      ),
                       ValueListenableBuilder<bool>(
                         valueListenable: _notificationsVisible,
                         builder: (context, visible, child) => NotificationsSection(
@@ -550,6 +554,14 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
         size: 24,
         // Используем динамический цвет для активной вкладки, как у других табов
         color: isSelected ? context.dynamicPrimaryColor : Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+
+  void _openFullScreenPlayer() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const FullScreenPlayer(),
       ),
     );
   }

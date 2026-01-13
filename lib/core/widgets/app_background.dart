@@ -34,6 +34,8 @@ class _AppBackgroundState extends State<AppBackground> {
   String? _backgroundPath;
   String? _backgroundType;
   String? _backgroundThumbnailPath;
+  double _blurSigma = 10.0;
+  double _darkeningOpacity = 0.4;
 
   @override
   void initState() {
@@ -50,11 +52,15 @@ class _AppBackgroundState extends State<AppBackground> {
     final path = await StorageService.getAppBackgroundPath();
     final type = await StorageService.getAppBackgroundType();
     final thumbnailPath = await StorageService.getAppBackgroundThumbnailPath();
+    final blur = await StorageService.getAppBackgroundBlur();
+    final darkening = await StorageService.getAppBackgroundDarkening();
     if (mounted) {
       setState(() {
         _backgroundPath = path;
         _backgroundType = type;
         _backgroundThumbnailPath = thumbnailPath;
+        _blurSigma = blur;
+        _darkeningOpacity = darkening;
       });
     }
   }
@@ -89,11 +95,11 @@ class _AppBackgroundState extends State<AppBackground> {
             _buildBackgroundContent(),
             // Затемняющий overlay
             Container(
-              color: Colors.black.withValues(alpha: 0.4),
+              color: Colors.black.withValues(alpha: _darkeningOpacity),
             ),
             // Блюр эффект
             BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              filter: ImageFilter.blur(sigmaX: _blurSigma, sigmaY: _blurSigma),
               child: Container(
                 color: Colors.transparent,
               ),
@@ -148,4 +154,3 @@ class _AppBackgroundState extends State<AppBackground> {
     }
   }
 }
-

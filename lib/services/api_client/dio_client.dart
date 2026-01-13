@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:kconnect_mobile/core/constants.dart';
 import 'package:kconnect_mobile/services/api_client/interceptors/auth_interceptor.dart';
 import 'package:kconnect_mobile/services/api_client/interceptors/logging_interceptor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,13 +27,24 @@ class WrappedDioClient {
     _setupFormDataDio();
   }
 
+  /// Генерирует User-Agent строку на основе платформы и версии приложения
+  String _generateUserAgent() {
+    if (Platform.isAndroid) {
+      return 'KConnect Android v${AppConstants.appVersion}';
+    } else if (Platform.isIOS) {
+      return 'KConnect iOS alt v${AppConstants.appVersion}';
+    } else {
+      return 'KConnect Mobile v${AppConstants.appVersion}';
+    }
+  }
+
   void _setupRegularDio() {
     regularDio = Dio(BaseOptions(
       baseUrl: 'https://k-connect.ru',
       headers: {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
-        'User-Agent': 'K-Connect/1.0.0 (Flutter Mobile)',
+        'User-Agent': _generateUserAgent(),
       },
       followRedirects: true,
       validateStatus: (status) => status != null && status < 500,
@@ -50,7 +64,7 @@ class WrappedDioClient {
       headers: {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
-      'User-Agent': 'K-Connect/1.0.0 (Flutter Mobile)',
+        'User-Agent': _generateUserAgent(),
       },
       followRedirects: true,
       validateStatus: (status) => status != null && status < 500,
@@ -169,7 +183,7 @@ class WrappedDioClient {
     final headers = {
       'Content-Type': 'application/json',
       'X-Requested-With': 'XMLHttpRequest',
-      'User-Agent': 'K-Connect/1.0.0 (Flutter Mobile)',
+      'User-Agent': _generateUserAgent(),
       'Origin': 'https://k-connect.ru',
       'Referer': 'https://k-connect.ru',
     };

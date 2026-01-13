@@ -106,6 +106,7 @@ void setupLocator() {
   locator.registerFactory<FetchOnlineUsersUseCase>(() => FetchOnlineUsersUseCase(locator<UsersRepositoryImpl>()));
   locator.registerFactory<FetchCommentsUseCase>(() => FetchCommentsUseCase(locator<FeedRepositoryImpl>()));
   locator.registerFactory<AddCommentUseCase>(() => AddCommentUseCase(locator<FeedRepositoryImpl>()));
+  locator.registerFactory<AddReplyUseCase>(() => AddReplyUseCase(locator<FeedRepositoryImpl>()));
   locator.registerFactory<DeleteCommentUseCase>(() => DeleteCommentUseCase(locator<FeedRepositoryImpl>()));
   locator.registerFactory<LikeCommentUseCase>(() => LikeCommentUseCase(locator<FeedRepositoryImpl>()));
   locator.registerFactory<VotePollUseCase>(() => VotePollUseCase(locator<FeedRepositoryImpl>()));
@@ -155,6 +156,7 @@ void setupLocator() {
         locator<FetchOnlineUsersUseCase>(),
         locator<FetchCommentsUseCase>(),
         locator<AddCommentUseCase>(),
+        locator<AddReplyUseCase>(),
         locator<DeleteCommentUseCase>(),
         locator<LikeCommentUseCase>(),
         locator<VotePollUseCase>(),

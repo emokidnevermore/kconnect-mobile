@@ -5,6 +5,7 @@ import '../../../auth/presentation/blocs/auth_state.dart';
 import '../../domain/usecases/fetch_posts_usecase.dart';
 import '../../domain/models/online_user.dart';
 import '../../domain/models/post.dart';
+import '../../domain/models/comment.dart';
 import 'feed_event.dart';
 import 'feed_state.dart';
 
@@ -21,6 +22,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
 
   final FetchCommentsUseCase _fetchCommentsUseCase;
   final AddCommentUseCase _addCommentUseCase;
+  final AddReplyUseCase _addReplyUseCase;
   final DeleteCommentUseCase _deleteCommentUseCase;
   final LikeCommentUseCase _likeCommentUseCase;
   final VotePollUseCase _votePollUseCase;
@@ -35,6 +37,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
     this._fetchOnlineUsersUseCase,
     this._fetchCommentsUseCase,
     this._addCommentUseCase,
+    this._addReplyUseCase,
     this._deleteCommentUseCase,
     this._likeCommentUseCase,
     this._votePollUseCase,
@@ -51,6 +54,12 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
     on<RefreshFeedEvent>(_onRefreshFeed);
     on<LoadCommentsEvent>(_onLoadComments);
     on<AddCommentEvent>(_onAddComment);
+    on<AddReplyEvent>(_onAddReply);
+    on<SetReplyingToEvent>(_onSetReplyingTo);
+    on<ClearReplyingToEvent>(_onClearReplyingTo);
+    on<StartReplyModeEvent>(_onStartReplyMode);
+    on<CancelReplyModeEvent>(_onCancelReplyMode);
+    on<SendReplyEvent>(_onSendReply);
     on<DeleteCommentEvent>(_onDeleteComment);
     on<LikeCommentEvent>(_onLikeComment);
     on<VotePollEvent>(_onVotePoll);
@@ -398,6 +407,148 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
     } catch (e) {
       emit(state.copyWith(
         processingCommentLikes: state.processingCommentLikes.where((id) => id != event.commentId).toSet(),
+      ));
+    }
+  }
+
+  Future<void> _onAddReply(
+    AddReplyEvent event,
+    Emitter<FeedState> emit,
+  ) async {
+    try {
+      final newReply = await _addReplyUseCase(event.commentId, event.content, parentReplyId: event.parentReplyId);
+
+      // Find the parent comment and add the reply to its replies list
+      final updatedComments = state.comments.map((comment) {
+        if (comment.id == event.commentId) {
+          return comment.copyWith(
+            replies: [...comment.replies, newReply],
+          );
+        }
+        return comment;
+      }).toList();
+
+      emit(state.copyWith(comments: updatedComments, replyingTo: null));
+
+      // Update post's comments count (replies also count as comments)
+      if (state.commentsPostId != null) {
+        final updatedPosts = state.posts.map((post) {
+          if (post.id == state.commentsPostId) {
+            return post.copyWith(commentsCount: post.commentsCount + 1);
+          }
+          return post;
+        }).toList();
+        emit(state.copyWith(posts: updatedPosts));
+      }
+    } catch (e) {
+      emit(state.copyWith(
+        commentsError: e.toString(),
+      ));
+    }
+  }
+
+  Future<void> _onSetReplyingTo(
+    SetReplyingToEvent event,
+    Emitter<FeedState> emit,
+  ) async {
+    emit(state.copyWith(replyingTo: event.comment));
+  }
+
+  void _onClearReplyingTo(
+    ClearReplyingToEvent event,
+    Emitter<FeedState> emit,
+  ) {
+    emit(state.copyWith(replyingTo: null));
+  }
+
+  void _onStartReplyMode(
+    StartReplyModeEvent event,
+    Emitter<FeedState> emit,
+  ) {
+    emit(state.copyWith(
+      replyingTo: event.comment,
+      replyMode: true,
+    ));
+  }
+
+  void _onCancelReplyMode(
+    CancelReplyModeEvent event,
+    Emitter<FeedState> emit,
+  ) {
+    debugPrint('_onCancelReplyMode called - clearing reply mode');
+    debugPrint('Before: replyingTo=${state.replyingTo?.id}, replyMode=${state.replyMode}');
+    emit(state.copyWith(
+      replyingTo: null,
+      replyMode: false,
+    ));
+    debugPrint('After: replyingTo=${state.replyingTo}, replyMode=false');
+  }
+
+  Future<void> _onSendReply(
+    SendReplyEvent event,
+    Emitter<FeedState> emit,
+  ) async {
+    if (state.replyingTo == null) return;
+
+    try {
+      // Find the root comment that contains the replyingTo comment
+      Comment? rootComment;
+      int? parentReplyId;
+
+      // Check if replyingTo is a root comment
+      try {
+        rootComment = state.comments.firstWhere((comment) => comment.id == state.replyingTo!.id);
+      } catch (e) {
+        rootComment = null;
+      }
+
+      if (rootComment != null) {
+        // Replying to a root comment
+        parentReplyId = null;
+      } else {
+        // Replying to a reply, find the root comment that contains this reply
+        for (final comment in state.comments) {
+          if (comment.replies.any((reply) => reply.id == state.replyingTo!.id)) {
+            rootComment = comment;
+            parentReplyId = state.replyingTo!.id;
+            break;
+          }
+        }
+      }
+
+      if (rootComment != null) {
+        final newReply = await _addReplyUseCase(rootComment.id, event.text, parentReplyId: parentReplyId);
+
+        // Find the parent comment and add the reply to its replies list
+        final updatedComments = state.comments.map((comment) {
+          if (comment.id == rootComment!.id) {
+            return comment.copyWith(
+              replies: [...comment.replies, newReply],
+            );
+          }
+          return comment;
+        }).toList();
+
+        emit(state.copyWith(
+          comments: updatedComments,
+          replyingTo: null,
+          replyMode: false,
+        ));
+
+        // Update post's comments count (replies also count as comments)
+        if (state.commentsPostId != null) {
+          final updatedPosts = state.posts.map((post) {
+            if (post.id == state.commentsPostId) {
+              return post.copyWith(commentsCount: post.commentsCount + 1);
+            }
+            return post;
+          }).toList();
+          emit(state.copyWith(posts: updatedPosts));
+        }
+      }
+    } catch (e) {
+      emit(state.copyWith(
+        commentsError: e.toString(),
       ));
     }
   }

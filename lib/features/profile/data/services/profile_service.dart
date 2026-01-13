@@ -329,20 +329,30 @@ class ProfileService {
 
   // Social interactions
 
-  Future<void> followUser(String username) async {
-    final response = await _client.post('/api/profile/follow/$username', null);
+  Future<Map<String, dynamic>> followUser(int followedId) async {
+    final response = await _client.post('/api/profile/follow', {'followed_id': followedId}, headers: {
+      'Origin': 'https://k-connect.ru',
+      'Referer': 'https://k-connect.ru/',
+    });
 
     if (response.statusCode != 200) {
       throw Exception('Failed to follow user');
     }
+
+    return response.data;
   }
 
-  Future<void> unfollowUser(String username) async {
-    final response = await _client.post('/api/profile/unfollow/$username', null);
+  Future<Map<String, dynamic>> unfollowUser(int followedId) async {
+    final response = await _client.post('/api/profile/follow', {'followed_id': followedId}, headers: {
+      'Origin': 'https://k-connect.ru',
+      'Referer': 'https://k-connect.ru/',
+    });
 
     if (response.statusCode != 200) {
       throw Exception('Failed to unfollow user');
     }
+
+    return response.data;
   }
 
   Future<void> toggleNotifications(String followedId, bool enabled) async {

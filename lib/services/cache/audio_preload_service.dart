@@ -264,16 +264,12 @@ class AudioPreloadService {
 
       // Предзагружаем трек
       await _cacheService.preloadAudio(trackUrl);
-      
+
       _cachedTracks.add(task.track.id.toString());
       task.isCompleted = true;
-
-      if (kDebugMode) {
-        debugPrint('AudioPreloadService: Successfully preloaded track ${task.track.id}');
-      }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('AudioPreloadService: Error preloading track ${task.track.id}: $e');
+        debugPrint('AudioPreloadService: Failed to preload track ${task.track.id}');
       }
       // Не помечаем как завершенный, чтобы можно было повторить позже
     }

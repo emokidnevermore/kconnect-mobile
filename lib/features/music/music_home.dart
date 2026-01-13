@@ -10,7 +10,7 @@ import 'widgets/music_navigation_card.dart';
 import 'widgets/favorites_section.dart';
 import 'widgets/playlists_section.dart';
 import 'widgets/all_tracks_section.dart';
-import 'widgets/music_search_screen.dart';
+
 import 'widgets/artists_section.dart';
 import 'widgets/artist_screen.dart';
 import './domain/models/track.dart';
@@ -25,7 +25,7 @@ import './presentation/blocs/music_state.dart';
 import '../../services/storage_service.dart';
 
 
-enum MusicSection { home, favorites, playlists, allTracks, search, artist }
+enum MusicSection { home, favorites, playlists, allTracks, artist }
 
 class MusicHome extends StatefulWidget {
   final ValueNotifier<MusicSection>? sectionController;
@@ -81,8 +81,7 @@ class _MusicHomeState extends State<MusicHome> with AutomaticKeepAliveClientMixi
         return _buildPlaylistsSection();
       case MusicSection.allTracks:
         return _buildAllTracksSection();
-      case MusicSection.search:
-        return _buildSearchSection();
+
       case MusicSection.artist:
         return _buildArtistSection();
     }
@@ -281,12 +280,7 @@ class _MusicHomeState extends State<MusicHome> with AutomaticKeepAliveClientMixi
     );
   }
 
-  Widget _buildSearchSection() {
-    return SwipePopContainer(
-      onPop: _goToHomeSection,
-      child: const MusicSearchScreen(),
-    );
-  }
+
 
   Widget _buildArtistSection() {
     final artistId = _currentArtistId;

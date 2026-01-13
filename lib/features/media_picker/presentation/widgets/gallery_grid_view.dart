@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import '../../../../theme/app_text_styles.dart';
 import '../../../../core/utils/theme_extensions.dart';
 import '../blocs/media_picker_bloc.dart';
@@ -111,15 +112,36 @@ class _GalleryGridViewState extends State<GalleryGridView> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: Image.file(
-                          File(mediaItem.path),
-                          fit: BoxFit.cover,
-                          cacheWidth: 200,
-                          cacheHeight: 200,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(color: Theme.of(context).colorScheme.surface, child: const Icon(Icons.warning, color: Colors.white));
-                          },
-                        ),
+                        child: mediaItem.assetEntity != null
+                            ? AssetEntityImage(
+                                mediaItem.assetEntity!,
+                                fit: BoxFit.cover,
+                                width: 200,
+                                height: 200,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    color: Theme.of(context).colorScheme.surface,
+                                    child: const Icon(Icons.warning, color: Colors.white),
+                                  );
+                                },
+                              )
+                            : mediaItem.path != null
+                                ? Image.file(
+                                    File(mediaItem.path!),
+                                    fit: BoxFit.cover,
+                                    cacheWidth: 200,
+                                    cacheHeight: 200,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        color: Theme.of(context).colorScheme.surface,
+                                        child: const Icon(Icons.warning, color: Colors.white),
+                                      );
+                                    },
+                                  )
+                                : Container(
+                                    color: Theme.of(context).colorScheme.surface,
+                                    child: const Icon(Icons.image, color: Colors.white),
+                                  ),
                       ),
                     ),
                   ),

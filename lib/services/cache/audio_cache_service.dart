@@ -96,7 +96,7 @@ class AudioCacheService {
   ///
   /// [url] - URL аудио для предзагрузки
   /// [maxRetries] - максимальное количество попыток при ошибке
-  Future<void> preloadAudio(String url, {int maxRetries = 2}) async {
+  Future<void> preloadAudio(String url, {int maxRetries = 1}) async {
     int attempts = 0;
     while (attempts < maxRetries) {
       try {
@@ -113,9 +113,9 @@ class AudioCacheService {
       } catch (e) {
         attempts++;
         if (attempts >= maxRetries) {
-          // Логируем ошибку только при последней попытке
+          // Логируем ошибку
           if (kDebugMode) {
-            debugPrint('AudioCacheService: Failed to preload audio after $maxRetries attempts: $e');
+            debugPrint('AudioCacheService: Failed to preload audio');
           }
         } else {
           // Ждем перед повторной попыткой

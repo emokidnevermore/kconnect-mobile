@@ -237,32 +237,24 @@ class PostContextMenu {
 
 
       if (shouldBlock == true) {
-        if (!context.mounted) return;
-
         // Выполняем блокировку/разблокировку через API
         if (isBlocked) {
           // Разблокировка
           final unblockUseCase = locator<UnblockUserUseCase>();
           final unblockResult = await unblockUseCase.call(post.userId);
 
-          if (!context.mounted) return;
-
           unblockResult.fold(
             (failure) {
               throw Exception('Не удалось разблокировать пользователя');
             },
             (response) {
-              if (context.mounted) {
-                _showSuccessMessage(response.message);
-              }
+              _showSuccessMessage(response.message);
             },
           );
         } else {
           // Блокировка
           final blockUseCase = locator<BlockUserUseCase>();
           final blockResult = await blockUseCase.call(post.userId);
-
-          if (!context.mounted) return;
 
           blockResult.fold(
             (failure) {

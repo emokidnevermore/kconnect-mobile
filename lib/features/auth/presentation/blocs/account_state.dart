@@ -39,17 +39,6 @@ class AccountLoaded extends AccountState {
   List<Object> get props => [accounts, activeAccount ?? ''];
 }
 
-
-
-class AccountSwitched extends AccountState {
-  final Account activeAccount;
-
-  const AccountSwitched(this.activeAccount);
-
-  @override
-  List<Object> get props => [activeAccount];
-}
-
 class AccountError extends AccountState {
   final String message;
 

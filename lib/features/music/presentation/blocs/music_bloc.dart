@@ -7,7 +7,11 @@ library;
 import 'dart:developer' as developer;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dio/dio.dart';
+import 'package:get_it/get_it.dart';
+import '../../../../services/media_player_service.dart';
 import '../../domain/repositories/music_repository.dart';
+import '../../domain/repositories/audio_repository.dart';
+import '../../data/repositories/audio_repository_impl.dart';
 import '../../domain/models/track.dart';
 import '../../domain/models/page_data.dart';
 import 'music_event.dart';
@@ -577,11 +581,18 @@ class MusicBloc extends Bloc<MusicEvent, MusicState> {
   /// Переключает статус лайка для указанного трека.
   /// Обновляет состояние трека во всех коллекциях, где он присутствует.
   /// Синхронизирует изменения между избранными, популярными, новыми треками и т.д.
+  /// Также обновляет MediaItem в AudioService для корректного отображения в мини-плеере.
   void _onTrackLiked(MusicTrackLiked event, Emitter<MusicState> emit) async {
     try {
       await _musicRepository.toggleLikeTrack(event.trackId);
 
       final updatedTrack = event.track.copyWith(isLiked: !event.track.isLiked);
+
+      // Обновляем MediaItem в AudioService для синхронизации с мини-плеером
+      await _updateMediaItemLikeState(updatedTrack);
+
+      // Обновляем статус лайка в очереди AudioService для корректного отображения при переключении треков
+      _updateQueueMediaItemLikeState(updatedTrack);
 
       emit(state.copyWith(
         favoritesPages: _updateTrackInFavoritesPages(state.favoritesPages, updatedTrack),
@@ -686,6 +697,44 @@ class MusicBloc extends Bloc<MusicEvent, MusicState> {
         ),
       );
     });
+  }
+
+  /// Обновляет статус лайка в MediaItem AudioService
+  ///
+  /// Синхронизирует статус лайка трека с MediaItem в AudioService.
+  /// Это необходимо для корректного отображения статуса лайка в мини-плеере,
+  /// который получает данные напрямую из стрима AudioService.
+  ///
+  /// [updatedTrack] - трек с обновленным статусом лайка
+  Future<void> _updateMediaItemLikeState(Track updatedTrack) async {
+    try {
+      // Получаем AudioRepository через locator
+      final audioRepository = GetIt.instance<AudioRepository>();
+      if (audioRepository is AudioRepositoryImpl) {
+        audioRepository.updateLikeState(updatedTrack.isLiked);
+      }
+    } catch (e) {
+      // Игнорируем ошибки обновления MediaItem - это не критично
+      developer.log('MusicBloc: Failed to update MediaItem like state: $e', name: 'MUSIC');
+    }
+  }
+
+  /// Обновляет статус лайка в очереди MediaItem'ов AudioService
+  ///
+  /// Синхронизирует статус лайка трека со всеми MediaItem'ами в очереди AudioService.
+  /// Это необходимо для корректного отображения статуса лайка при переключении треков,
+  /// когда используются MediaItem'ы из очереди.
+  ///
+  /// [updatedTrack] - трек с обновленным статусом лайка
+  void _updateQueueMediaItemLikeState(Track updatedTrack) {
+    try {
+      // Вызываем статический метод MediaPlayerService для обновления очереди
+      // ignore: invalid_use_of_visible_for_testing_member
+      MediaPlayerService.updateTrackLikeStateInQueue(updatedTrack.id, updatedTrack.isLiked);
+    } catch (e) {
+      // Игнорируем ошибки обновления MediaItem - это не критично
+      developer.log('MusicBloc: Failed to update queue MediaItem like state: $e', name: 'MUSIC');
+    }
   }
 
   /// Обработчик поиска треков

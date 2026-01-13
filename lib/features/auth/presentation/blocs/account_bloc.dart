@@ -209,7 +209,7 @@ class AccountBloc extends Bloc<AccountEvent, AccountState> {
           debugPrint('AccountBloc: Triggering data reload for all features...');
           await _dataClearService.clearUserDataForAccountSwitch();
 
-          // Ресет ui
+          // Full UI restart to properly reload all data and prevent bugs
           debugPrint('AccountBloc: Restarting app to fully reload UI with new account data...');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             AppRouter.navigatorKey.currentState?.pushNamedAndRemoveUntil(

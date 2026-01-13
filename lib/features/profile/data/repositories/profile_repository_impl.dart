@@ -363,21 +363,23 @@ class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   @override
-  Future<void> followUser(String username) async {
-    await _profileService.followUser(username);
+  Future<Map<String, dynamic>> followUser(int followedId) async {
+    final result = await _profileService.followUser(followedId);
     // Clear profile caches that might be affected
     final prefs = await _getPrefs;
-    await prefs.remove('$_profileCacheKey$username');
-    await prefs.remove('$_cacheTimestampKey$_profileCacheKey$username');
+    await prefs.remove('$_profileCacheKey$followedId');
+    await prefs.remove('$_cacheTimestampKey$_profileCacheKey$followedId');
+    return result;
   }
 
   @override
-  Future<void> unfollowUser(String username) async {
-    await _profileService.unfollowUser(username);
+  Future<Map<String, dynamic>> unfollowUser(int followedId) async {
+    final result = await _profileService.unfollowUser(followedId);
     // Clear profile caches that might be affected
     final prefs = await _getPrefs;
-    await prefs.remove('$_profileCacheKey$username');
-    await prefs.remove('$_cacheTimestampKey$_profileCacheKey$username');
+    await prefs.remove('$_profileCacheKey$followedId');
+    await prefs.remove('$_cacheTimestampKey$_profileCacheKey$followedId');
+    return result;
   }
 
   @override

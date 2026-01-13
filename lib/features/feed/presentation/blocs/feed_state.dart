@@ -61,6 +61,11 @@ class FeedState extends Equatable {
   final int commentsPage;
   final bool commentsIsLoadingMore;
   final String? commentsError;
+  /// Комментарий, на который пользователь отвечает (null если не отвечает)
+  final Comment? replyingTo;
+
+  /// Флаг режима ответа - определяет, показывать ли UI для ответа
+  final bool replyMode;
 
   // Состояния обработки лайков
   final Set<int> processingPostLikes;
@@ -84,6 +89,8 @@ class FeedState extends Equatable {
     this.commentsPage = 1,
     this.commentsIsLoadingMore = false,
     this.commentsError,
+    this.replyingTo,
+    this.replyMode = false,
     this.processingPostLikes = const {},
     this.processingCommentLikes = const {},
   });
@@ -92,6 +99,7 @@ class FeedState extends Equatable {
   ///
   /// Используется для иммутабельных обновлений состояния в BLoC паттерне.
   /// Null значения означают, что поле не нужно изменять.
+  /// Для nullable полей (replyingTo, error, commentsError, commentsPostId) null в параметре означает "установить в null"
   FeedState copyWith({
     FeedStatus? status,
     List<Post>? posts,
@@ -109,6 +117,8 @@ class FeedState extends Equatable {
     int? commentsPage,
     bool? commentsIsLoadingMore,
     String? commentsError,
+    Comment? replyingTo,
+    bool? replyMode,
     Set<int>? processingPostLikes,
     Set<int>? processingCommentLikes,
   }) {
@@ -116,19 +126,21 @@ class FeedState extends Equatable {
       status: status ?? this.status,
       posts: posts ?? this.posts,
       onlineUsers: onlineUsers ?? this.onlineUsers,
-      error: error,
+      error: error,  // Для nullable полей передаем напрямую (null означает "установить null")
       page: page ?? this.page,
       hasNext: hasNext ?? this.hasNext,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       paginationStatus: paginationStatus ?? this.paginationStatus,
       isRefreshing: isRefreshing ?? this.isRefreshing,
-      commentsPostId: commentsPostId ?? this.commentsPostId,
+      commentsPostId: commentsPostId,  // nullable
       comments: comments ?? this.comments,
       commentsStatus: commentsStatus ?? this.commentsStatus,
       commentsHasNext: commentsHasNext ?? this.commentsHasNext,
       commentsPage: commentsPage ?? this.commentsPage,
       commentsIsLoadingMore: commentsIsLoadingMore ?? this.commentsIsLoadingMore,
-      commentsError: commentsError ?? this.commentsError,
+      commentsError: commentsError,  // nullable
+      replyingTo: replyingTo,  // nullable - передаем напрямую
+      replyMode: replyMode ?? this.replyMode,
       processingPostLikes: processingPostLikes ?? this.processingPostLikes,
       processingCommentLikes: processingCommentLikes ?? this.processingCommentLikes,
     );
@@ -156,6 +168,8 @@ class FeedState extends Equatable {
         commentsPage,
         commentsIsLoadingMore,
         commentsError,
+        replyingTo,
+        replyMode,
         processingPostLikes,
         processingCommentLikes,
       ];

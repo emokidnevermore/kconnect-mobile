@@ -10,6 +10,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/widgets/authorized_cached_network_image.dart';
+import '../../../core/widgets/profile_accent_color_provider.dart';
 import '../../../core/constants.dart';
 import '../../../core/utils/theme_extensions.dart';
 import '../../../theme/app_text_styles.dart';
@@ -22,6 +23,7 @@ import '../../../features/feed/presentation/blocs/feed_event.dart';
 import '../domain/models/comment.dart';
 import '../domain/models/post.dart';
 import '../../../features/profile/utils/profile_navigation_utils.dart';
+import '../../../services/storage_service.dart';
 
 /// Кастомная физика прокрутки для комментариев
 ///
@@ -73,7 +75,7 @@ class CommentsBody extends StatelessWidget {
       onTap: () {
         FocusScope.of(context).unfocus();
       },
-      behavior: HitTestBehavior.opaque,
+      behavior: HitTestBehavior.translucent,
       child: BlocBuilder<FeedBloc, FeedState>(
         builder: (context, state) {
           final comments = state.comments;
@@ -367,7 +369,7 @@ class _AnimatedCommentThreadState extends State<_AnimatedCommentThread>
   }
 }
 
-class CommentThread extends StatelessWidget {
+class CommentThread extends StatefulWidget {
   final Comment comment;
   final int? currentUserId;
   final String Function(String) preprocessText;
@@ -382,34 +384,78 @@ class CommentThread extends StatelessWidget {
   });
 
   @override
+  State<CommentThread> createState() => _CommentThreadState();
+}
+
+class _CommentThreadState extends State<CommentThread> {
+  bool _showAllReplies = false;
+
+  @override
   Widget build(BuildContext context) {
-    final replies = comment.replies;
+    final replies = widget.comment.replies;
+    final visibleReplies = _showAllReplies ? replies : replies.take(2).toList();
+    final hiddenRepliesCount = replies.length - visibleReplies.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CommentItem(
-          comment: comment,
-          currentUserId: currentUserId,
-          preprocessText: preprocessText,
-          isProcessing: isProcessing,
+          comment: widget.comment,
+          currentUserId: widget.currentUserId,
+          preprocessText: widget.preprocessText,
+          isProcessing: widget.isProcessing,
         ),
         if (replies.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(left: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: replies.map((reply) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: CommentThread(
-                    comment: reply,
-                    currentUserId: currentUserId,
-                    preprocessText: preprocessText,
-                    isProcessing: false,
-                  ),
-                );
-              }).toList(),
+          Container(
+            margin: const EdgeInsets.only(left: 28), // Полоска на 8px от левого края
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: context.profileAccentColor,
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8), // Ответы на 16px от левого края (8+8)
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...visibleReplies.map((reply) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: CommentThread(
+                        comment: reply,
+                        currentUserId: widget.currentUserId,
+                        preprocessText: widget.preprocessText,
+                        isProcessing: false,
+                      ),
+                    );
+                  }),
+                  if (hiddenRepliesCount > 0 && !_showAllReplies)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, left: 12),
+                      child: GestureDetector(
+                        onTap: () => setState(() => _showAllReplies = true),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'Показать еще $hiddenRepliesCount ${hiddenRepliesCount == 1 ? 'ответ' : hiddenRepliesCount < 5 ? 'ответа' : 'ответов'}',
+                            style: AppTextStyles.postStats.copyWith(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
       ],
@@ -440,11 +486,19 @@ class CommentItem extends StatelessWidget {
     final likesCount = comment.likesCount;
     final isLiked = comment.userLiked;
 
+    // Используем логику цвета как у постов
+    final hasBackground = StorageService.appBackgroundPathNotifier.value != null &&
+        StorageService.appBackgroundPathNotifier.value!.isNotEmpty;
+    final cardColor = hasBackground
+        ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.7)
+        : Theme.of(context).colorScheme.surfaceContainerHighest;
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -569,8 +623,7 @@ class CommentItem extends StatelessWidget {
               children: [
                 GestureDetector(
                   onTap: () {
-                    // TODO: Реализовать функцию ответа на комментарий - добавить диалог ввода ответа,
-                    // обновить UI для отображения вложенных ответов, отправить ответ на сервер
+                    context.read<FeedBloc>().add(StartReplyModeEvent(comment));
                   },
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -647,12 +700,19 @@ class _CommentsInputState extends State<CommentsInput> {
     super.dispose();
   }
 
-  void _addComment() {
+  void _sendMessage(Comment? replyingTo, List<Comment> comments) {
     final text = _commentController.text.trim();
     if (text.isNotEmpty) {
-      context.read<FeedBloc>().add(AddCommentEvent(widget.postId, text));
+      final feedBloc = context.read<FeedBloc>();
+
+      if (replyingTo != null) {
+        feedBloc.add(SendReplyEvent(text));
+      } else {
+        feedBloc.add(AddCommentEvent(widget.postId, text));
+      }
+
       _commentController.clear();
-      
+
       // Smooth scroll to top (newest comment is first)
       if (widget.scrollController != null && widget.scrollController!.hasClients) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -670,61 +730,134 @@ class _CommentsInputState extends State<CommentsInput> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-      },
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          border: Border(
-            top: BorderSide(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-              width: 1,
-            ),
-          ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _commentController,
-                decoration: InputDecoration(
-                  hintText: 'Написать комментарий...',
-                  border: InputBorder.none,
-                ),
-                style: AppTextStyles.postContent.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-                maxLines: 3,
-                minLines: 1,
-              ),
-            ),
-          const SizedBox(width: 8),
-          Container(
+    return BlocBuilder<FeedBloc, FeedState>(
+      builder: (context, state) {
+        final replyingTo = state.replyingTo;
+        final comments = state.comments;
+        debugPrint('CommentsInput build - replyingTo: ${replyingTo?.id}, replyMode: ${state.replyMode}');
+
+        return GestureDetector(
+          onTap: () {
+            FocusScope.of(context).unfocus();
+          },
+          behavior: HitTestBehavior.translucent,
+          child: Container(
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: context.dynamicPrimaryColor,
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              onPressed: _addComment,
-              icon: const Padding(
-                padding: EdgeInsets.all(12),
-                child: Icon(
-                  Icons.send,
-                  color: Colors.white,
-                  size: 18,
+              color: Theme.of(context).colorScheme.surfaceContainer,
+              border: Border(
+                top: BorderSide(
+                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                  width: 1,
                 ),
               ),
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (replyingTo != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Ответ на ${replyingTo.userName}:',
+                                style: AppTextStyles.postAuthor.copyWith(
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                replyingTo.content,
+                                style: AppTextStyles.postContent.copyWith(
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            padding: const EdgeInsets.all(6),
+                            constraints: const BoxConstraints(
+                              minWidth: 28,
+                              minHeight: 28,
+                            ),
+                            onPressed: () {
+                              debugPrint('Close button pressed - dispatching CancelReplyModeEvent');
+                              context.read<FeedBloc>().add(const CancelReplyModeEvent());
+                            },
+                            icon: Icon(
+                              Icons.close,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _commentController,
+                        decoration: InputDecoration(
+                          hintText: replyingTo != null ? 'Написать ответ...' : 'Написать комментарий...',
+                          border: InputBorder.none,
+                        ),
+                        style: AppTextStyles.postContent.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        maxLines: 3,
+                        minLines: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: context.dynamicPrimaryColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => _sendMessage(replyingTo, comments),
+                        icon: const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Icon(
+                            Icons.send,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
-    )
+        );
+      },
     );
   }
 }

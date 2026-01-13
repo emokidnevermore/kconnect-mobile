@@ -35,6 +35,14 @@ abstract class FeedRepository {
   /// Returns: созданный объект комментария
   Future<Comment> addComment(int postId, String content);
 
+  /// Добавляет ответ на комментарий
+  ///
+  /// [commentId] - идентификатор комментария
+  /// [content] - текст ответа
+  /// [parentReplyId] - ID родительского ответа (для вложенных ответов)
+  /// Returns: созданный объект ответа
+  Future<Comment> addReply(int commentId, String content, {int? parentReplyId});
+
   /// Удаляет комментарий
   ///
   /// [commentId] - идентификатор комментария для удаления

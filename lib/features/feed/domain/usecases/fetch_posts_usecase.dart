@@ -94,6 +94,26 @@ class AddCommentUseCase {
   }
 }
 
+/// Use case для добавления ответа на комментарий
+///
+/// Создает новый ответ на комментарий от имени текущего пользователя.
+/// Валидирует содержимое перед отправкой на сервер.
+class AddReplyUseCase {
+  final FeedRepository _repository;
+
+  AddReplyUseCase(this._repository);
+
+  /// Выполняет добавление ответа на комментарий
+  ///
+  /// [commentId] - идентификатор комментария
+  /// [content] - текст ответа
+  /// [parentReplyId] - ID родительского ответа (для вложенных ответов)
+  /// Returns: созданный объект ответа
+  Future<Comment> call(int commentId, String content, {int? parentReplyId}) {
+    return _repository.addReply(commentId, content, parentReplyId: parentReplyId);
+  }
+}
+
 /// Use case для удаления комментария
 ///
 /// Удаляет комментарий пользователя. Доступно только для комментариев

@@ -113,6 +113,12 @@ class _MenuScreenState extends State<MenuScreen> {
                   ),
                 ),
               ),
+              // Bottom padding for small screens to account for tab bar
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: MediaQuery.of(context).size.height < 700 ? 40 : 0,
+                ),
+              ),
               // Fill remaining space to ensure full height coverage
               SliverFillRemaining(
                 hasScrollBody: false,
@@ -190,8 +196,8 @@ class _MenuScreenState extends State<MenuScreen> {
         title: const Text('О приложении'),
         content: const Text(
           'KConnect Mobile\n'
-          'Версия: 1.0.0\n\n'
-          'У меня маленькие яйца',
+          'Версия: 1.1.0\n\n'
+          'У меня огромные яйца',
         ),
         actions: [
           TextButton(

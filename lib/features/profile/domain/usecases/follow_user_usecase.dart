@@ -11,13 +11,13 @@ class FollowUserUseCase {
 
   /// Выполняет подписку на пользователя
   ///
-  /// [username] - имя пользователя для подписки
-  Future<void> follow(String username) => _repository.followUser(username);
+  /// [followedId] - ID пользователя для подписки
+  Future<Map<String, dynamic>> follow(int followedId) => _repository.followUser(followedId);
 
   /// Выполняет отписку от пользователя
   ///
-  /// [username] - имя пользователя для отписки
-  Future<void> unfollow(String username) => _repository.unfollowUser(username);
+  /// [followedId] - ID пользователя для отписки
+  Future<Map<String, dynamic>> unfollow(int followedId) => _repository.unfollowUser(followedId);
 
   /// Управляет уведомлениями от подписанного пользователя
   ///

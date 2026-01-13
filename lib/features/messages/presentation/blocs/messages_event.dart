@@ -185,3 +185,5 @@ class LoadPostEvent extends MessagesEvent {
 }
 
 class ClearPostCacheEvent extends MessagesEvent {}
+
+class ResetMessagesEvent extends MessagesEvent {}

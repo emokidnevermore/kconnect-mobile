@@ -79,6 +79,7 @@ class MessagesBloc extends Bloc<MessagesEvent, MessagesState> {
     on<MarkChatAsReadOptimisticallyEvent>(_onMarkChatAsReadOptimistically);
     on<LoadPostEvent>(_onLoadPost);
     on<ClearPostCacheEvent>(_onClearPostCache);
+    on<ResetMessagesEvent>(_onResetMessages);
 
     // Listen to auth changes to reload chats when user changes
     // _authBloc.stream.listen(_onAuthStateChanged);
@@ -818,6 +819,15 @@ class MessagesBloc extends Bloc<MessagesEvent, MessagesState> {
   ) {
     debugPrint('MessagesBloc: Clearing post cache');
     emit(state.withClearedPostCache());
+  }
+
+  void _onResetMessages(
+    ResetMessagesEvent event,
+    Emitter<MessagesState> emit,
+  ) {
+    debugPrint('MessagesBloc: Resetting messages state for account switch');
+    // Reset to initial state, clearing all chats and messages
+    emit(const MessagesState());
   }
 
   // Старые методы-обработчики удалены - теперь используются handlers в websocket_handlers/

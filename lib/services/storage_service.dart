@@ -179,11 +179,14 @@ class StorageService {
     await prefs.remove('saved_accent_color');
     await prefs.remove('tab_bar_glass_mode');
     await prefs.remove('hide_tab_bar');
+    await prefs.remove('invert_player_tap_behavior');
     await prefs.remove('app_background_path');
     await prefs.remove('app_background_type');
     await prefs.remove('app_background_name');
     await prefs.remove('app_background_size');
     await prefs.remove('app_background_thumbnail_path');
+    await prefs.remove('app_background_blur');
+    await prefs.remove('app_background_darkening');
   }
 
   // ValueNotifier для отслеживания изменений режима таб-бара
@@ -289,6 +292,36 @@ class StorageService {
     } else {
       await prefs.setString('app_background_thumbnail_path', path);
     }
+  }
+
+  static Future<double> getAppBackgroundBlur() async {
+    final prefs = await _prefs;
+    return prefs.getDouble('app_background_blur') ?? 10.0; // По умолчанию 10 sigma
+  }
+
+  static Future<void> setAppBackgroundBlur(double blur) async {
+    final prefs = await _prefs;
+    await prefs.setDouble('app_background_blur', blur);
+  }
+
+  static Future<double> getAppBackgroundDarkening() async {
+    final prefs = await _prefs;
+    return prefs.getDouble('app_background_darkening') ?? 0.4; // По умолчанию 40%
+  }
+
+  static Future<void> setAppBackgroundDarkening(double darkening) async {
+    final prefs = await _prefs;
+    await prefs.setDouble('app_background_darkening', darkening);
+  }
+
+  static Future<bool> getInvertPlayerTapBehavior() async {
+    final prefs = await _prefs;
+    return prefs.getBool('invert_player_tap_behavior') ?? false; // По умолчанию false (нормальное поведение)
+  }
+
+  static Future<void> setInvertPlayerTapBehavior(bool invert) async {
+    final prefs = await _prefs;
+    await prefs.setBool('invert_player_tap_behavior', invert);
   }
 
   static Future<List<String>> getMusicPlayedTracksHistory(String userId) async {

@@ -35,6 +35,7 @@ class QueueBloc extends Bloc<QueueEvent, QueueState> {
     on<QueueShuffleRequested>(_onShuffleRequested);
     on<QueueClearRequested>(_onClearRequested);
     on<QueueErrorOccurred>(_onErrorOccurred);
+    on<QueueIndexChanged>(_onIndexChanged);
   }
 
   void _onInitialized(QueueInitialized event, Emitter<QueueState> emit) {
@@ -287,6 +288,16 @@ class QueueBloc extends Bloc<QueueEvent, QueueState> {
 
   void _onErrorOccurred(QueueErrorOccurred event, Emitter<QueueState> emit) {
     emit(state.withError(event.error));
+  }
+
+  void _onIndexChanged(QueueIndexChanged event, Emitter<QueueState> emit) {
+    if (state.currentQueue != null && event.newIndex >= 0 && event.newIndex < state.totalTracks) {
+      final updatedQueue = state.currentQueue!.copyWith(currentIndex: event.newIndex);
+      emit(state.copyWith(currentQueue: updatedQueue));
+
+      // Предзагружаем треки после изменения индекса
+      _preloadQueueTracks(state.copyWith(currentQueue: updatedQueue));
+    }
   }
 
   /// Предзагружает треки из очереди

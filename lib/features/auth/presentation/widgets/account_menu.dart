@@ -45,9 +45,7 @@ class AccountMenu extends StatelessWidget {
           return _buildSwitchingMenu(context, state.fromAccount, state.toAccount);
         }
 
-        if (state is AccountSwitched) {
-          return _buildMenu(context, [], state.activeAccount);
-        }
+
 
         return const SizedBox.shrink();
       },

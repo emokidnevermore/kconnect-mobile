@@ -24,7 +24,18 @@ class KConnectAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandl
     _player.playbackEventStream.map(_transformEvent).listen((state) {
       playbackState.add(state);
     });
-    
+
+    // Слушаем изменения текущего индекса для обновления mediaItem
+    _player.currentIndexStream.listen((currentIndex) {
+      if (currentIndex != null && currentIndex >= 0 && currentIndex < queue.value.length) {
+        final newMediaItem = queue.value[currentIndex];
+        if (kDebugMode) {
+          debugPrint('KConnectAudioHandler: currentIndex changed to $currentIndex, updating mediaItem to: ${newMediaItem.title}');
+        }
+        mediaItem.value = newMediaItem;
+      }
+    });
+
     // Восстанавливаем callback из static service
     _onSkipCallback = _SkipCallbackService.getCallback();
   }
@@ -167,11 +178,20 @@ class KConnectAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandl
       }
       
       await _player.setAudioSources(audioSources, initialIndex: clampedIndex);
-      
+
+      // Explicitly seek to the correct track to ensure we start from the right position
+      // setAudioSources with initialIndex doesn't guarantee the player will start from that index
+      if (clampedIndex != _player.currentIndex) {
+        await _player.seek(Duration.zero, index: clampedIndex);
+        if (kDebugMode) {
+          debugPrint('KConnectAudioHandler: Explicitly sought to index $clampedIndex');
+        }
+      }
+
       if (kDebugMode) {
         debugPrint('KConnectAudioHandler: Audio source set, currentIndex=${_player.currentIndex}, processingState=${_player.processingState}');
       }
-      
+
       // Устанавливаем текущий mediaItem
       if (clampedIndex >= 0 && clampedIndex < mediaItems.length) {
         mediaItem.value = mediaItems[clampedIndex];
@@ -539,6 +559,31 @@ class KConnectAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandl
       );
     }
   }
+
+  /// Обновляет статус лайка для конкретного трека в очереди
+  void updateTrackLikeStateInQueue(int trackId, bool isLiked) {
+    final currentQueue = queue.value;
+    if (currentQueue.isEmpty) return;
+
+    final updatedQueue = currentQueue.map((mediaItem) {
+      final itemTrackId = mediaItem.extras?['trackId'] as int?;
+      if (itemTrackId == trackId) {
+        final updatedExtras = Map<String, dynamic>.from(mediaItem.extras ?? {});
+        updatedExtras['isLiked'] = isLiked;
+        return mediaItem.copyWith(extras: updatedExtras);
+      }
+      return mediaItem;
+    }).toList();
+
+    queue.value = updatedQueue;
+
+    if (kDebugMode) {
+      debugPrint('KConnectAudioHandler: Updated like state for track $trackId to $isLiked in queue');
+    }
+  }
+
+  /// Публичный доступ к стриму изменений текущего индекса
+  Stream<int?> get currentIndexStream => _player.currentIndexStream;
 
   /// Строит индексы для компактного уведомления Android
   List<int>? _buildAndroidCompactActionIndices(List<MediaControl> controls, bool canSkipPrevious, bool canSkipNext) {

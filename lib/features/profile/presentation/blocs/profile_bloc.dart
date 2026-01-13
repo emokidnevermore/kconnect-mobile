@@ -564,50 +564,52 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   }
 
   void _onFollowUser(FollowUserEvent event, Emitter<ProfileState> emit) async {
+    final currentState = state;
+    if (currentState is! ProfileLoaded || currentState.isOwnProfile) {
+      return;
+    }
+
     try {
-      await _followUserUseCase.follow(event.username);
+      final response = await _followUserUseCase.follow(currentState.profile.id);
 
-      // Update following info after successful follow
-      final currentState = state;
-      if (currentState is ProfileLoaded && !currentState.isOwnProfile && _currentUserId != null) {
-        if (currentState.followingInfo != null) {
-          final updatedFollowingInfo = FollowingInfo(
-            currentUserFollows: true,
-            currentUserIsFriend: currentState.followingInfo!.currentUserIsFriend,
-            followsBack: currentState.followingInfo!.followsBack,
-            isSelf: currentState.followingInfo!.isSelf,
-          );
-          emit(currentState.copyWith(followingInfo: updatedFollowingInfo));
-        }
-      }
+      // Update following info using API response data
+      final updatedFollowingInfo = FollowingInfo(
+        currentUserFollows: response['is_following'] ?? false,
+        currentUserIsFriend: response['is_friend'] ?? false,
+        followsBack: response['is_followed_by'] ?? false,
+        isSelf: response['is_self'] ?? false,
+      );
 
-      emit(ProfileFollowSuccess('Вы подписались на @${event.username}', true));
+      final updatedState = currentState.copyWith(followingInfo: updatedFollowingInfo);
+      emit(updatedState);
     } catch (e) {
-      emit(ProfileError('Не удалось подписаться: ${e.toString()}'));
+      // Silently ignore API errors for follow/unfollow actions
+      debugPrint('Failed to follow user: ${e.toString()}');
     }
   }
 
   void _onUnfollowUser(UnfollowUserEvent event, Emitter<ProfileState> emit) async {
+    final currentState = state;
+    if (currentState is! ProfileLoaded || currentState.isOwnProfile) {
+      return;
+    }
+
     try {
-      await _followUserUseCase.unfollow(event.username);
+      final response = await _followUserUseCase.unfollow(currentState.profile.id);
 
-      // Update following info after successful unfollow
-      final currentState = state;
-      if (currentState is ProfileLoaded && !currentState.isOwnProfile && _currentUserId != null) {
-        if (currentState.followingInfo != null) {
-          final updatedFollowingInfo = FollowingInfo(
-            currentUserFollows: false,
-            currentUserIsFriend: false, // Unfollowing also removes friendship
-            followsBack: false,
-            isSelf: currentState.followingInfo!.isSelf,
-          );
-          emit(currentState.copyWith(followingInfo: updatedFollowingInfo));
-        }
-      }
+      // Update following info using API response data
+      final updatedFollowingInfo = FollowingInfo(
+        currentUserFollows: response['is_following'] ?? false,
+        currentUserIsFriend: response['is_friend'] ?? false,
+        followsBack: response['is_followed_by'] ?? false,
+        isSelf: response['is_self'] ?? false,
+      );
 
-      emit(ProfileFollowSuccess('Вы отписались от @${event.username}', false));
+      final updatedState = currentState.copyWith(followingInfo: updatedFollowingInfo);
+      emit(updatedState);
     } catch (e) {
-      emit(ProfileError('Не удалось отписаться: ${e.toString()}'));
+      // Silently ignore API errors for follow/unfollow actions
+      debugPrint('Failed to unfollow user: ${e.toString()}');
     }
   }
 

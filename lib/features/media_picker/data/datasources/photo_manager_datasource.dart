@@ -55,10 +55,9 @@ class PhotoManagerDatasource {
   }
 
   /// Конвертирует AssetEntity в LocalMediaItem
-  Future<LocalMediaItem> _convertAssetToMediaItem(AssetEntity asset) async {
-    final file = await asset.file;
-    final mimeType = asset.mimeType;
-
+  ///
+  /// Оптимизированная версия: не прелоадит файл, хранит AssetEntity для ленивой загрузки
+  LocalMediaItem _convertAssetToMediaItem(AssetEntity asset) {
     LocalMediaType type;
     if (asset.type == AssetType.image) {
       type = LocalMediaType.image;
@@ -69,25 +68,15 @@ class PhotoManagerDatasource {
       type = LocalMediaType.image;
     }
 
-    int fileSize = 0;
-    if (file != null) {
-      try {
-        fileSize = await file.length();
-      } catch (e) {
-        // Ошибка получения размера
-      }
-    }
-
     return LocalMediaItem(
       id: asset.id,
-      path: file?.path ?? '',
       type: type,
       createdAt: asset.createDateTime,
-      size: fileSize,
       width: asset.width,
       height: asset.height,
       duration: asset.videoDuration,
-      mimeType: mimeType,
+      mimeType: asset.mimeType,
+      assetEntity: asset, // Сохраняем AssetEntity для AssetEntityImageProvider
     );
   }
 

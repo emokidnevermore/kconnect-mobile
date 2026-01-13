@@ -68,8 +68,8 @@ abstract class ProfileRepository {
   Future<void> deleteSocialLink(String name);
 
   // Social interactions
-  Future<void> followUser(String username);
-  Future<void> unfollowUser(String username);
+  Future<Map<String, dynamic>> followUser(int followedId);
+  Future<Map<String, dynamic>> unfollowUser(int followedId);
   Future<void> toggleNotifications(String followedUsername, bool enabled);
 
   // Cache management

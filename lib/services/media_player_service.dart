@@ -8,13 +8,14 @@ import 'kconnect_audio_handler.dart';
 import 'cache/audio_preload_service.dart';
 
 /// Простой сервис-мост между QueueBloc и audio_service
-/// 
+///
 /// Синхронизирует состояние очереди из QueueBloc с audio_service.
 /// Один источник истины - QueueBloc.
 class MediaPlayerService {
   static QueueBloc? _queueBloc;
   static OnSkipCallback? _skipCallback;
   static bool _isInitialized = false;
+  static bool _isSwitchingTrack = false; // Флаг для предотвращения рекурсивных вызовов
 
   /// Инициализация сервиса
   static void initialize(QueueBloc queueBloc) {
@@ -52,6 +53,9 @@ class MediaPlayerService {
       }
       _onQueueCreated(currentState);
     }
+
+    // Настраиваем слушатель изменений currentIndex из AudioHandler
+    _setupCurrentIndexListener();
 
     // Отслеживаем предыдущее состояние для определения изменений
     QueueState? previousState;
@@ -216,8 +220,17 @@ class MediaPlayerService {
       if (kDebugMode) {
         debugPrint('MediaPlayerService: Switching to track at index ${state.currentIndex}');
       }
+
+      // Устанавливаем флаг чтобы предотвратить рекурсивные вызовы
+      _isSwitchingTrack = true;
+
       handler.skipToQueueItem(state.currentIndex);
-      
+
+      // Сбрасываем флаг после небольшой задержки
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _isSwitchingTrack = false;
+      });
+
       // Предзагружаем следующий и предыдущий треки
       _preloadQueueTracks(state);
     }
@@ -273,6 +286,48 @@ class MediaPlayerService {
     }
   }
 
+  /// Настройка слушателя изменений currentIndex из AudioHandler
+  static void _setupCurrentIndexListener() {
+    final handler = AudioServiceManager.getHandler();
+    if (handler == null || _queueBloc == null) {
+      if (kDebugMode) {
+        debugPrint('MediaPlayerService: Handler or QueueBloc not available for currentIndex listener');
+      }
+      return;
+    }
+
+    if (handler is KConnectAudioHandler) {
+      // Слушаем изменения текущего индекса в just_audio
+      // При автоматическом переходе на следующий трек обновляем QueueBloc
+      // Пропускаем если это результат ручного переключения (флаг _isSwitchingTrack)
+      handler.currentIndexStream.listen((currentIndex) {
+        if (_isSwitchingTrack) {
+          if (kDebugMode) {
+            debugPrint('MediaPlayerService: Skipping currentIndex change - manual switching in progress');
+          }
+          return;
+        }
+
+        if (currentIndex != null && _queueBloc != null) {
+          final currentState = _queueBloc!.state;
+          if (currentState.hasQueue &&
+              currentIndex >= 0 &&
+              currentIndex < currentState.totalTracks &&
+              currentIndex != currentState.currentIndex) {
+            if (kDebugMode) {
+              debugPrint('MediaPlayerService: currentIndex changed to $currentIndex, notifying QueueBloc');
+            }
+            _queueBloc!.add(QueueIndexChanged(currentIndex));
+          }
+        }
+      });
+
+      if (kDebugMode) {
+        debugPrint('MediaPlayerService: currentIndex listener set up successfully');
+      }
+    }
+  }
+
   /// Обновление доступности команд для системного плеера
   static void _updateCommandAvailability(QueueState state) {
     final handler = AudioServiceManager.getHandler();
@@ -281,6 +336,22 @@ class MediaPlayerService {
         canSkipNext: state.canGoNext,
         canSkipPrevious: state.canGoPrevious,
       );
+    }
+  }
+
+  /// Обновляет статус лайка для трека во всех MediaItem'ах очереди
+  ///
+  /// Используется для синхронизации статуса лайка между MusicBloc и AudioService очередью.
+  /// Когда трек лайкается/дизлайкается, нужно обновить соответствующий MediaItem в очереди,
+  /// чтобы при переключении треков статус отображался корректно.
+  static void updateTrackLikeStateInQueue(int trackId, bool isLiked) {
+    final handler = AudioServiceManager.getHandler();
+    if (handler is KConnectAudioHandler) {
+      handler.updateTrackLikeStateInQueue(trackId, isLiked);
+    } else {
+      if (kDebugMode) {
+        debugPrint('MediaPlayerService: Handler is not KConnectAudioHandler, cannot update queue like state');
+      }
     }
   }
 }

@@ -1,3 +1,5 @@
+import 'package:photo_manager/photo_manager.dart';
+
 /// Типы медиа-файлов с устройства
 enum LocalMediaType {
   /// Изображение
@@ -14,8 +16,8 @@ class LocalMediaItem {
   /// Уникальный идентификатор файла
   final String id;
 
-  /// Путь к файлу в файловой системе
-  final String path;
+  /// Путь к файлу в файловой системе (лениво загружается)
+  final String? path;
 
   /// Тип медиа-файла
   final LocalMediaType type;
@@ -23,8 +25,8 @@ class LocalMediaItem {
   /// Дата создания файла
   final DateTime createdAt;
 
-  /// Размер файла в байтах
-  final int size;
+  /// Размер файла в байтах (лениво загружается)
+  final int? size;
 
   /// Ширина изображения или видео (опционально)
   final int? width;
@@ -38,16 +40,20 @@ class LocalMediaItem {
   /// MIME-тип файла
   final String? mimeType;
 
+  /// AssetEntity для оптимизированного отображения превью
+  final AssetEntity? assetEntity;
+
   const LocalMediaItem({
     required this.id,
-    required this.path,
     required this.type,
     required this.createdAt,
-    required this.size,
+    this.path,
+    this.size,
     this.width,
     this.height,
     this.duration,
     this.mimeType,
+    this.assetEntity,
   });
 
   /// Создание копии с изменениями
@@ -61,6 +67,7 @@ class LocalMediaItem {
     int? height,
     Duration? duration,
     String? mimeType,
+    AssetEntity? assetEntity,
   }) {
     return LocalMediaItem(
       id: id ?? this.id,
@@ -72,6 +79,7 @@ class LocalMediaItem {
       height: height ?? this.height,
       duration: duration ?? this.duration,
       mimeType: mimeType ?? this.mimeType,
+      assetEntity: assetEntity ?? this.assetEntity,
     );
   }
 
@@ -91,14 +99,15 @@ class LocalMediaItem {
 
   /// Получает читаемый размер файла
   String get formattedSize {
+    if (size == null) return '';
     const suffixes = ['B', 'KB', 'MB', 'GB'];
-    var size = this.size.toDouble();
+    var fileSize = size!.toDouble();
     var i = 0;
-    while (size >= 1024 && i < suffixes.length - 1) {
-      size /= 1024;
+    while (fileSize >= 1024 && i < suffixes.length - 1) {
+      fileSize /= 1024;
       i++;
     }
-    return '${size.toStringAsFixed(1)} ${suffixes[i]}';
+    return '${fileSize.toStringAsFixed(1)} ${suffixes[i]}';
   }
 
   /// Получает читаемую длительность видео

@@ -224,76 +224,86 @@ class _PostCardContentState extends State<_PostCardContent> {
 
   void _openComments() {
     final postId = widget.post.id;
-    
+
     showModalBottomSheet<void>(
       context: context,
-      useSafeArea: true,
+      useSafeArea: false,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (modalSheetContext) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          snap: true,
-          snapSizes: const [0.5, 0.7, 0.95],
-          expand: false,
-          builder: (context, scrollController) {
-            return Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainer,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
+        return BlocProvider<FeedBloc>.value(
+          value: context.read<FeedBloc>(),
+          child: DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            snap: true,
+            snapSizes: const [0.5, 0.7, 0.95],
+            expand: false,
+            builder: (context, scrollController) {
+              // Используем логику цвета как у постов для фона модалки
+              final hasBackground = StorageService.appBackgroundPathNotifier.value != null &&
+                  StorageService.appBackgroundPathNotifier.value!.isNotEmpty;
+              final modalBackgroundColor = hasBackground
+                  ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.95)
+                  : Theme.of(context).colorScheme.surfaceContainer;
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: modalBackgroundColor,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(28),
+                  ),
                 ),
-              ),
-              child: Column(
-                children: [
-                  // Handle bar
-                  Container(
-                    margin: const EdgeInsets.only(top: 12, bottom: 8),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(2),
+                child: Column(
+                  children: [
+                    // Handle bar
+                    Container(
+                      margin: const EdgeInsets.only(top: 12, bottom: 8),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                  ),
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Комментарии',
-                          style: AppTextStyles.h3.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface,
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Комментарии',
+                            style: AppTextStyles.h3.copyWith(
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: () => Navigator.of(modalSheetContext).pop(),
-                          icon: Icon(
-                            Icons.close,
-                            color: Theme.of(context).colorScheme.onSurface,
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () => Navigator.of(modalSheetContext).pop(),
+                            icon: Icon(
+                              Icons.close,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  // Comments content
-                  Expanded(
-                    child: CommentsBody(
-                      postId: postId,
-                      post: widget.post,
-                      scrollController: scrollController,
+                    // Comments content
+                    Expanded(
+                      child: CommentsBody(
+                        postId: postId,
+                        post: widget.post,
+                        scrollController: scrollController,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
+                  ],
+                ),
+              );
+            },
+          ),
         );
       },
     );

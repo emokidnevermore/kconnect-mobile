@@ -154,6 +154,29 @@ class PostsService {
     });
   }
 
+  /// Добавляет ответ на комментарий
+  ///
+  /// Отправляет POST запрос для создания ответа на указанный комментарий.
+  /// Включает необходимые заголовки Origin и Referer для корректной работы API.
+  Future<Map<String, dynamic>> addReply(int commentId, String content, {int? parentReplyId}) async {
+    return _retryRequest(() async {
+      final Map<String, dynamic> payload = {'content': content};
+      if (parentReplyId != null) {
+        payload['parent_reply_id'] = parentReplyId;
+      }
+      final res = await _client.post('/api/comments/$commentId/replies', payload, headers: {
+        'Origin': 'https://k-connect.ru',
+        'Referer': 'https://k-connect.ru/',
+      });
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final data = res.data as Map<String, dynamic>;
+        return data;
+      } else {
+        throw Exception('Не удалось добавить ответ на комментарий: ${res.statusCode}');
+      }
+    });
+  }
+
   /// Создает новый пост
   ///
   /// Отправляет POST запрос для создания нового поста с текстом, изображениями, видео, музыкой и опросом.

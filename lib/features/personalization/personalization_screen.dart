@@ -31,6 +31,7 @@ import '../../core/widgets/app_background.dart';
 import 'widgets/accent_color_card.dart';
 import 'widgets/tab_bar_style_card.dart';
 import 'widgets/hide_tab_bar_card.dart';
+import 'widgets/player_tap_inversion_card.dart';
 import 'widgets/tab_bar_preview.dart';
 import 'widgets/background_section.dart';
 import 'dart:io';
@@ -50,20 +51,26 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
   bool _useProfileAccentColor = false;
   TabBarGlassMode _tabBarGlassMode = TabBarGlassMode.glass;
   bool _hideTabBar = false;
+  bool _invertPlayerTapBehavior = false;
   String? _appBackgroundPath;
   String? _appBackgroundType;
   String? _appBackgroundName;
   int? _appBackgroundSize;
   String? _appBackgroundThumbnailPath;
+  double _appBackgroundBlur = 10.0;
+  double _appBackgroundDarkening = 0.4;
   
   // Начальные значения для отслеживания изменений
   bool _initialUseProfileAccentColor = false;
   TabBarGlassMode _initialTabBarGlassMode = TabBarGlassMode.glass;
   bool _initialHideTabBar = false;
+  bool _initialInvertPlayerTapBehavior = false;
   String? _initialAppBackgroundPath;
   String? _initialAppBackgroundType;
   String? _initialAppBackgroundName;
   int? _initialAppBackgroundSize;
+  double _initialAppBackgroundBlur = 10.0;
+  double _initialAppBackgroundDarkening = 0.4;
   
   // Флаг для отслеживания, нужно ли применить цвет профиля после загрузки
   bool _pendingProfileColorApply = false;
@@ -78,20 +85,26 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     _useProfileAccentColor = await StorageService.getUseProfileAccentColor();
     _tabBarGlassMode = await StorageService.getTabBarGlassMode();
     _hideTabBar = await StorageService.getHideTabBar();
+    _invertPlayerTapBehavior = await StorageService.getInvertPlayerTapBehavior();
     _appBackgroundPath = await StorageService.getAppBackgroundPath();
     _appBackgroundType = await StorageService.getAppBackgroundType();
     _appBackgroundThumbnailPath = await StorageService.getAppBackgroundThumbnailPath();
     final metadata = await StorageService.getAppBackgroundMetadata();
     _appBackgroundName = metadata?['name'];
     _appBackgroundSize = metadata?['size'];
-    
+    _appBackgroundBlur = await StorageService.getAppBackgroundBlur();
+    _appBackgroundDarkening = await StorageService.getAppBackgroundDarkening();
+
     _initialUseProfileAccentColor = _useProfileAccentColor;
     _initialTabBarGlassMode = _tabBarGlassMode;
     _initialHideTabBar = _hideTabBar;
+    _initialInvertPlayerTapBehavior = _invertPlayerTapBehavior;
     _initialAppBackgroundPath = _appBackgroundPath;
     _initialAppBackgroundType = _appBackgroundType;
     _initialAppBackgroundName = _appBackgroundName;
     _initialAppBackgroundSize = _appBackgroundSize;
+    _initialAppBackgroundBlur = _appBackgroundBlur;
+    _initialAppBackgroundDarkening = _appBackgroundDarkening;
     setState(() {});
   }
 
@@ -99,10 +112,13 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     return _useProfileAccentColor != _initialUseProfileAccentColor ||
            _tabBarGlassMode != _initialTabBarGlassMode ||
            _hideTabBar != _initialHideTabBar ||
+           _invertPlayerTapBehavior != _initialInvertPlayerTapBehavior ||
            _appBackgroundPath != _initialAppBackgroundPath ||
            _appBackgroundType != _initialAppBackgroundType ||
            _appBackgroundName != _initialAppBackgroundName ||
-           _appBackgroundSize != _initialAppBackgroundSize;
+           _appBackgroundSize != _initialAppBackgroundSize ||
+           _appBackgroundBlur != _initialAppBackgroundBlur ||
+           _appBackgroundDarkening != _initialAppBackgroundDarkening;
   }
 
   Future<void> _applyChanges() async {
@@ -116,10 +132,13 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     await StorageService.setUseProfileAccentColor(_useProfileAccentColor);
     await StorageService.setTabBarGlassMode(_tabBarGlassMode);
     await StorageService.setHideTabBar(_hideTabBar);
+    await StorageService.setInvertPlayerTapBehavior(_invertPlayerTapBehavior);
     await StorageService.setAppBackgroundPath(_appBackgroundPath);
     await StorageService.setAppBackgroundType(_appBackgroundType);
     await StorageService.setAppBackgroundMetadata(_appBackgroundName, _appBackgroundSize);
     await StorageService.setAppBackgroundThumbnailPath(_appBackgroundThumbnailPath);
+    await StorageService.setAppBackgroundBlur(_appBackgroundBlur);
+    await StorageService.setAppBackgroundDarkening(_appBackgroundDarkening);
 
     if (!mounted) return;
 
@@ -127,10 +146,13 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     _initialUseProfileAccentColor = _useProfileAccentColor;
     _initialTabBarGlassMode = _tabBarGlassMode;
     _initialHideTabBar = _hideTabBar;
+    _initialInvertPlayerTapBehavior = _invertPlayerTapBehavior;
     _initialAppBackgroundPath = _appBackgroundPath;
     _initialAppBackgroundType = _appBackgroundType;
     _initialAppBackgroundName = _appBackgroundName;
     _initialAppBackgroundSize = _appBackgroundSize;
+    _initialAppBackgroundBlur = _appBackgroundBlur;
+    _initialAppBackgroundDarkening = _appBackgroundDarkening;
 
     // Применяем изменения акцентного цвета
     if (_useProfileAccentColor) {
@@ -234,6 +256,22 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                             ),
                             const SizedBox(height: 24),
                             Text(
+                              'Плеер',
+                              style: AppTextStyles.body.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            PlayerTapInversionCard(
+                              invertPlayerTapBehavior: _invertPlayerTapBehavior,
+                              onChanged: (value) {
+                                setState(() {
+                                  _invertPlayerTapBehavior = value;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
                               'Фон приложения',
                               style: AppTextStyles.body.copyWith(
                                 fontWeight: FontWeight.w600,
@@ -246,8 +284,20 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                               backgroundName: _appBackgroundName,
                               backgroundSize: _appBackgroundSize,
                               backgroundThumbnailPath: _appBackgroundThumbnailPath,
+                              backgroundBlur: _appBackgroundBlur,
+                              backgroundDarkening: _appBackgroundDarkening,
                               onPickBackground: _showBackgroundPicker,
                               onRemoveBackground: _removeBackground,
+                              onBlurChanged: (value) {
+                                setState(() {
+                                  _appBackgroundBlur = value;
+                                });
+                              },
+                              onDarkeningChanged: (value) {
+                                setState(() {
+                                  _appBackgroundDarkening = value;
+                                });
+                              },
                             ),
                           ],
                         ),

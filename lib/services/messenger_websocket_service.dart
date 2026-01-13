@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
 import 'package:uuid/uuid.dart';
+import 'package:kconnect_mobile/core/constants.dart';
 import 'api_client/dio_client.dart';
 
 /// Состояния WebSocket соединения
@@ -161,7 +162,7 @@ class MessengerWebSocketService {
       'device_id': _deviceId,
       'client_info': {
         'platform': platform,
-        'version': '0.1.0', // From pubspec.yaml
+        'version': AppConstants.appVersion,
         'device': device,
       },
     };

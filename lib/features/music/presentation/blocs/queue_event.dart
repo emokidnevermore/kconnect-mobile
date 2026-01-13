@@ -71,3 +71,12 @@ class QueueErrorOccurred extends QueueEvent {
   @override
   List<Object?> get props => [error];
 }
+
+class QueueIndexChanged extends QueueEvent {
+  final int newIndex;
+
+  const QueueIndexChanged(this.newIndex);
+
+  @override
+  List<Object?> get props => [newIndex];
+}
