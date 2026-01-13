@@ -41,7 +41,6 @@ jobs:
           name: ios-ipa
           path: build/ios/iphoneos/FlutterApp.ipa
 
-
   build-android:
     name: Android Build
     runs-on: ubuntu-latest
@@ -62,12 +61,18 @@ jobs:
           name: android-apk
           path: build/app/outputs/flutter-apk/app-release.apk
 
-
   release:
     name: Create Release
     needs: [build-ios, build-android]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
+
+      - name: Read version from pubspec.yaml
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -75,8 +80,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Release v1.0.${{ github.run_number }}
+          tag_name: v${{ env.VERSION }}
+          name: Release v${{ env.VERSION }}
           files: |
             artifacts/ios-ipa/FlutterApp.ipa
             artifacts/android-apk/app-release.apk
