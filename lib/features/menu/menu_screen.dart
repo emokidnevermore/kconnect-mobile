@@ -213,7 +213,7 @@ class _MenuScreenState extends State<MenuScreen> {
         title: const Text('О приложении'),
         content: const Text(
           'KConnect Mobile\n'
-          'Версия: 1.1.0\n\n'
+          'Версия: 1.1.1\n\n'
           'У меня огромные яйца',
         ),
         actions: [

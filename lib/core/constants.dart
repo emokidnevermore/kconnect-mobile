@@ -6,7 +6,7 @@ class AppConstants {
   /// Версия приложения
   ///
   /// Должна соответствовать версии в pubspec.yaml
-  static const String appVersion = '1.1.0';
+  static const String appVersion = '1.1.1';
 
   /// URL плейсхолдера аватара для пользователей без аватаров
   ///

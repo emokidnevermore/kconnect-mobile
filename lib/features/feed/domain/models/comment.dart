@@ -56,7 +56,7 @@ class Comment {
     } else if (timestamp is String) {
       try {
         // Add 'Z' to indicate UTC timezone since API sends UTC timestamps
-        final dateTime = DateTime.parse(timestamp + 'Z');
+        final dateTime = DateTime.parse('${timestamp}Z');
         return dateTime.millisecondsSinceEpoch;
       } catch (e) {
         return 0;
