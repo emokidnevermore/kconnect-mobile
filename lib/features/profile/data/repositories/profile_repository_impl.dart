@@ -56,6 +56,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
 
   // Cache duration (in minutes)
   static const int _profileCacheDuration = 30; // 30 minutes for profiles
+  static const int _currentProfileCacheDuration = 5; // 5 minutes for current user profile (shorter for fresh data)
   static const int _statsCacheDuration = 30; // 30 minutes for stats
   static const int _postsCacheDuration = 30; // 30 minutes for posts
 
@@ -92,7 +93,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
 
       if (cached != null && timestamp != null) {
         final cacheAge = DateTime.now().millisecondsSinceEpoch - timestamp;
-        final maxAge = _profileCacheDuration * 60 * 1000; // minutes to milliseconds
+        final maxAge = _currentProfileCacheDuration * 60 * 1000; // minutes to milliseconds (5 minutes for current user)
 
         if (cacheAge < maxAge) {
           try {

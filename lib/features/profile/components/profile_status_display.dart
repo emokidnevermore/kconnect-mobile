@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../theme/app_colors.dart';
 
@@ -14,10 +15,12 @@ import '../../../theme/app_colors.dart';
 /// Формат статуса: {icon}text или просто text.
 class ProfileStatusDisplay extends StatelessWidget {
   final String statusText;
+  final String? statusColor;
 
   const ProfileStatusDisplay({
     super.key,
     required this.statusText,
+    this.statusColor,
   });
 
   @override
@@ -40,9 +43,11 @@ class ProfileStatusDisplay extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Icon(displayData.icon, color: displayData.textColor, size: 16),
+                SvgPicture.asset(
+                  displayData.icon!,
+                  color: displayData.textColor,
+                  width: 16,
+                  height: 16,
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -60,7 +65,7 @@ class ProfileStatusDisplay extends StatelessWidget {
   }
 
   StatusDisplayData _parseStatusText(String statusText) {
-    final backgroundColor = _parseColor(statusText);
+    final backgroundColor = _parseColor(statusColor);
     final isBgLight = backgroundColor.computeLuminance() > 0.85;
     final textColor = isBgLight ? Colors.black : AppColors.textPrimary;
 
@@ -89,36 +94,53 @@ class ProfileStatusDisplay extends StatelessWidget {
     );
   }
 
-  Color _parseColor(String statusText) {
+  Color _parseColor(String? statusColor) {
+    if (statusColor == null || statusColor.isEmpty) {
+      return const Color(0xFFFFFFFF); // Белый по умолчанию
+    }
+
     try {
-      final colorStr = statusText.contains('}') ? 'FFFFFF' : 'FFFFFF';
+      // Убираем # если есть
+      final colorStr = statusColor.startsWith('#')
+          ? statusColor.substring(1)
+          : statusColor;
+
+      // Парсим hex цвет
       final colorInt = int.parse(colorStr, radix: 16);
-      return Color(colorInt | 0xFF000000);
+
+      // Добавляем alpha если не указан
+      if (colorStr.length == 6) {
+        return Color(colorInt | 0xFF000000);
+      } else if (colorStr.length == 8) {
+        return Color(colorInt);
+      } else {
+        return const Color(0xFFFFFFFF);
+      }
     } catch (e) {
       return const Color(0xFFFFFFFF);
     }
   }
 
-  IconData? _getStatusIcon(String iconName) {
+  String? _getStatusIcon(String iconName) {
     switch (iconName) {
       case 'info':
-        return Icons.info_outline;
+        return 'lib/assets/icons/status_icons/info.svg';
       case 'cloud':
-        return Icons.cloud_outlined;
+        return 'lib/assets/icons/status_icons/cloud.svg';
       case 'minion':
-        return Icons.people_outline;
+        return 'lib/assets/icons/status_icons/minion.svg';
       case 'heart':
-        return Icons.favorite_border;
+        return 'lib/assets/icons/status_icons/heart.svg';
       case 'star':
-        return Icons.star_border;
+        return 'lib/assets/icons/status_icons/star.svg';
       case 'music':
-        return Icons.music_note;
+        return 'lib/assets/icons/status_icons/music.svg';
       case 'location':
-        return Icons.location_on;
+        return 'lib/assets/icons/status_icons/location.svg';
       case 'cake':
-        return Icons.cake;
+        return 'lib/assets/icons/status_icons/cake.svg';
       case 'chat':
-        return Icons.chat_bubble_outline;
+        return 'lib/assets/icons/status_icons/chat.svg';
       default:
         return null;
     }
@@ -127,7 +149,7 @@ class ProfileStatusDisplay extends StatelessWidget {
 
 class StatusDisplayData {
   final String text;
-  final IconData? icon;
+  final String? icon;
   final Color backgroundColor;
   final Color textColor;
 

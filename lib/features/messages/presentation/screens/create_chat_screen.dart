@@ -37,6 +37,8 @@ class _CreateChatScreenState extends State<CreateChatScreen> with SingleTickerPr
   final Map<int, Map<String, dynamic>> _selectedUsers = {}; // userId -> user data
   bool _isCreating = false;
 
+
+
   @override
   void initState() {
     super.initState();
@@ -122,6 +124,8 @@ class _CreateChatScreenState extends State<CreateChatScreen> with SingleTickerPr
       _selectedUsers.remove(userId);
     });
   }
+
+
 
   void _createPersonalChat() {
     if (_selectedUserId == null) {
@@ -218,6 +222,7 @@ class _CreateChatScreenState extends State<CreateChatScreen> with SingleTickerPr
         behavior: HitTestBehavior.opaque,
         child: TabBarView(
           controller: _tabController,
+          physics: const NeverScrollableScrollPhysics(),
           children: [
             _buildPersonalChatTab(),
             _buildGroupChatTab(),
@@ -498,7 +503,7 @@ class _CreateChatScreenState extends State<CreateChatScreen> with SingleTickerPr
             const SizedBox(height: 8),
             Text(
               isPersonal
-                  ? 'Введите username или имя пользователя для поиска'
+                  ? 'Введите username или имя пользователя'
                   : 'Введите username или имя пользователя для добавления в группу',
               style: AppTextStyles.bodySecondary.copyWith(
                 color: context.dynamicPrimaryColor.withValues(alpha: 0.7),

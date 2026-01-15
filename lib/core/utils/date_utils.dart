@@ -50,3 +50,27 @@ String formatRelativeTimeFromMillis(int milliseconds) {
     return '${dateTime.day}.${dateTime.month}.${dateTime.year}';
   }
 }
+
+/// Форматирует время в относительный формат из миллисекунд с эпохи (уже в локальном времени)
+///
+/// [milliseconds] - количество миллисекунд с 1970-01-01 в локальном времени
+/// Returns: Относительное время (например: "только что", "5 мин назад")
+String formatRelativeTimeFromMillisLocal(int milliseconds) {
+  final dateTime = DateTime.fromMillisecondsSinceEpoch(milliseconds);
+  final now = DateTime.now();
+  final difference = now.difference(dateTime);
+
+  if (difference.inDays == 0) {
+    if (difference.inHours == 0) {
+      if (difference.inMinutes == 0) {
+        return 'только что';
+      }
+      return '${difference.inMinutes} мин назад';
+    }
+    return '${difference.inHours} ч назад';
+  } else if (difference.inDays < 30) {
+    return '${difference.inDays} д назад';
+  } else {
+    return '${dateTime.day}.${dateTime.month}.${dateTime.year}';
+  }
+}

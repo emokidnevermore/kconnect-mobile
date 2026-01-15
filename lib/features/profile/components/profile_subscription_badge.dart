@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../domain/models/subscription_info.dart';
 
 /// Виджет бейджа подписки
@@ -20,10 +21,7 @@ class ProfileSubscriptionBadge extends StatelessWidget {
   });
 
   String get _subscriptionLabel {
-    if (subscription.isLifetime) {
-      return 'Навсегда';
-    }
-    if (subscription.type == 'max') {
+    if (subscription.isLifetime || subscription.type == 'max') {
       return 'MAX';
     }
     return subscription.type.toUpperCase();
@@ -31,6 +29,9 @@ class ProfileSubscriptionBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Определяем, нужно ли показывать иконку
+    final shouldShowIcon = subscription.type == 'max' || subscription.isLifetime;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -44,12 +45,15 @@ class ProfileSubscriptionBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            subscription.isLifetime ? Icons.all_inclusive : Icons.star,
-            size: 16,
-            color: accentColor,
-          ),
-          const SizedBox(width: 6),
+          if (shouldShowIcon) ...[
+            SvgPicture.asset(
+              'lib/assets/icons/max_subscribe.svg',
+              width: 16,
+              height: 16,
+              colorFilter: ColorFilter.mode(accentColor, BlendMode.srcIn),
+            ),
+            const SizedBox(width: 6),
+          ],
           Text(
             _subscriptionLabel,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(

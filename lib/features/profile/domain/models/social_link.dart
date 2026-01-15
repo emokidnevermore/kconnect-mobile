@@ -1,8 +1,11 @@
+import 'package:equatable/equatable.dart';
+
 /// Социальная ссылка профиля пользователя
 ///
 /// Представляет ссылку на социальную сеть или внешний ресурс.
 /// Используется для отображения ссылок в профиле пользователя.
-class SocialLink {
+
+class SocialLink extends Equatable {
   /// Название социальной сети или платформы (например, "Instagram", "Twitter")
   final String name;
 
@@ -27,4 +30,7 @@ class SocialLink {
       'link': link,
     };
   }
+
+  @override
+  List<Object?> get props => [name, link];
 }

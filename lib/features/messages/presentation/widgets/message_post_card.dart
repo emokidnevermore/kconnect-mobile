@@ -160,7 +160,7 @@ class _MessagePostCardContentState extends State<_MessagePostCardContent> {
 
               // Музыка
               if (PostUtils.hasMusic(widget.post.music)) ...[
-                PostMusic(tracks: widget.post.music!),
+                PostMusic(tracks: widget.post.music!, post: widget.post),
                 const SizedBox(height: 8),
               ],
 
@@ -425,7 +425,7 @@ class _MessageRepostCardContentState extends State<_MessageRepostCardContent> {
 
               // Музыка оригинального поста
               if (PostUtils.hasMusic(originalPost.music)) ...[
-                PostMusic(tracks: originalPost.music!),
+                PostMusic(tracks: originalPost.music!, post: originalPost),
                 const SizedBox(height: 8),
               ],
 

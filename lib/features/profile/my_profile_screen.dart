@@ -7,7 +7,6 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:kconnect_mobile/injection.dart';
 import 'package:kconnect_mobile/theme/app_text_styles.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_bloc.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_event.dart';
@@ -17,8 +16,8 @@ import 'components/profile_background.dart';
 import 'components/profile_content_card.dart';
 import 'components/profile_posts_section.dart';
 import 'utils/profile_color_utils.dart';
-import 'utils/profile_cache_utils.dart';
 import '../../core/widgets/profile_accent_color_provider.dart';
+import 'widgets/profile_edit_screen.dart';
 
 /// Экран моего профиля с поддержкой keep alive
 class MyProfileScreen extends StatefulWidget {
@@ -28,54 +27,21 @@ class MyProfileScreen extends StatefulWidget {
   State<MyProfileScreen> createState() => _MyProfileScreenState();
 }
 
-class _MyProfileScreenState extends State<MyProfileScreen> with AutomaticKeepAliveClientMixin, ProfileCacheManager {
-
-  @override
-  bool get wantKeepAlive => true;
+class _MyProfileScreenState extends State<MyProfileScreen> {
 
   @override
   void initState() {
     super.initState();
-    initCacheManager();
   }
 
   @override
   void dispose() {
-    disposeCacheManager();
     super.dispose();
   }
 
   @override
-  void onAppResumed() {
-    _checkCacheAndRefreshIfNeeded();
-  }
-
-  void _checkCacheAndRefreshIfNeeded() async {
-    try {
-      final shouldRefresh = await shouldRefreshCache(_getPostsCount(), null);
-      if (!mounted) return;
-      if (shouldRefresh) {
-        context.read<ProfileBloc>().add(RefreshProfileEvent(forceRefresh: true));
-      }
-    } catch (e) {
-      // Ошибка
-    }
-  }
-
-  int? _getPostsCount() {
-    final currentState = context.read<ProfileBloc>().state;
-    if (currentState is ProfileLoaded) {
-      return currentState.posts.length + (currentState.pinnedPost != null ? 1 : 0);
-    }
-    return null;
-  }
-
-  @override
   Widget build(BuildContext context) {
-    super.build(context);
-    return BlocProvider<ProfileBloc>(
-      create: (BuildContext context) => locator<ProfileBloc>(),
-      child: BlocBuilder<ProfileBloc, ProfileState>(
+    return BlocBuilder<ProfileBloc, ProfileState>(
       builder: (context, state) {
         if (state is ProfileInitial) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -129,7 +95,6 @@ class _MyProfileScreenState extends State<MyProfileScreen> with AutomaticKeepAli
 
         return const Center(child: CircularProgressIndicator());
       },
-    )
     );
   }
 
@@ -201,19 +166,11 @@ class _MyProfileScreenState extends State<MyProfileScreen> with AutomaticKeepAli
     return screenWidget;
   }
 
-  VoidCallback get _showEditProfileDialog => () => showDialog(
-        // TODO: Реализовать диалог редактирования профиля
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          title: const Text('Редактирование профиля'),
-          content: const Text('Эта функция будет реализована в следующей версии'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
+  VoidCallback get _showEditProfileDialog => () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const ProfileEditScreen(),
+          ),
+        );
+      };
 }

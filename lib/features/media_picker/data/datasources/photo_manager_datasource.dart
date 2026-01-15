@@ -32,7 +32,7 @@ class PhotoManagerDatasource {
     final List<LocalMediaItem> mediaItems = [];
     for (final asset in assets) {
       try {
-        final mediaItem = await _convertAssetToMediaItem(asset);
+        final mediaItem = _convertAssetToMediaItem(asset);
         mediaItems.add(mediaItem);
       } catch (e) {
         continue;

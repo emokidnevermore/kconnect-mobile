@@ -16,11 +16,14 @@ import 'package:kconnect_mobile/features/profile/domain/usecases/update_profile_
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_event.dart';
 import 'package:kconnect_mobile/features/profile/presentation/blocs/profile_state.dart';
 
-/// BLoC для управления состоянием профиля пользователя
+/// Refactored ProfileBloc with simplified state management
 ///
-/// Отвечает за загрузку профилей, постов, управление подписками,
-/// обновление профиля и навигацию между профилями в стеке.
-/// Обеспечивает последовательную загрузку данных для предотвращения конфликтов.
+/// Key improvements:
+/// - Simplified loading logic with clear states
+/// - Pull to refresh always loads fresh data
+/// - Concurrent data loading instead of sequential
+/// - Better error handling and state transitions
+/// - Proper reload after profile editing
 class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   final FetchUserProfileUseCase _fetchProfileUseCase;
   final FetchUserPostsUseCase _fetchUserPostsUseCase;
@@ -31,34 +34,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   final ProfileRepository _repository;
   final AuthBloc _authBloc;
 
-  /// Stack for nested profile navigation
-  final List<ProfileStackEntry> _profileStack = [];
-
-  /// Track loading states to prevent concurrent operations
-  final Map<String, bool> _loadingProfiles = {};
-  final Map<String, bool> _loadingPosts = {};
-  
-  /// Track last push time to prevent rapid repeated pushes
-  final Map<String, DateTime> _lastPushTime = {};
-
-  /// Get current state - last in stack or initial
-  ProfileState get _currentState =>
-      _profileStack.isNotEmpty ? _profileStack.last.state : ProfileInitial();
-
-  /// Update stack entry with current state if it matches the username
-  void _updateStackEntryWithState(ProfileLoaded state) {
-    if (_profileStack.isNotEmpty) {
-      final lastEntry = _profileStack.last;
-      if (lastEntry.username == state.profile.username || 
-          (lastEntry.username == 'current' && state.isOwnProfile)) {
-        _profileStack[_profileStack.length - 1] = ProfileStackEntry(
-          username: lastEntry.username,
-          state: state,
-        );
-        debugPrint('ProfileBloc: Updated stack entry for ${lastEntry.username} with state (posts=${state.posts.length}, followingInfo=${state.followingInfo != null})');
-      }
-    }
-  }
+  /// Simple loading state tracking - just one flag per operation type
+  bool _isLoadingProfile = false;
+  bool _isLoadingPosts = false;
 
   ProfileBloc({
     required AuthBloc authBloc,
@@ -89,7 +67,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<UpdateProfileEvent>(_onUpdateProfile);
     on<UpdateProfileStatusEvent>(_onUpdateProfileStatus);
     on<UpdateProfileAvatarEvent>(_onUpdateProfileAvatar);
+    on<UpdateProfileBannerEvent>(_onUpdateProfileBanner);
     on<DeleteProfileAvatarEvent>(_onDeleteProfileAvatar);
+    on<DeleteProfileBannerEvent>(_onDeleteProfileBanner);
     on<AddSocialLinkEvent>(_onAddSocialLink);
     on<DeleteSocialLinkEvent>(_onDeleteSocialLink);
     on<FollowUserEvent>(_onFollowUser);
@@ -120,358 +100,252 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     return userIdentifier == 'current' || userIdentifier == _currentUserId;
   }
 
-  void _onLoadProfile(LoadProfileEvent event, Emitter<ProfileState> emit) async {
-    debugPrint('ProfileBloc: _onLoadProfile called with userIdentifier=${event.userIdentifier}, forceRefresh=${event.forceRefresh}');
-
-    // Check if already loading this profile to prevent concurrent operations
-    final loadingKey = event.userIdentifier;
-    if (_loadingProfiles[loadingKey] == true) {
-      debugPrint('ProfileBloc: Profile $loadingKey is already loading, skipping');
+  /// Load profile data for other users
+  Future<void> _loadOtherProfileData(String userIdentifier, bool forceRefresh, Emitter<ProfileState> emit, {bool isRefreshing = false}) async {
+    if (_isLoadingProfile) {
+      debugPrint('ProfileBloc: Already loading profile, skipping');
       return;
     }
 
-    // Capture current state snapshot at the start - this is critical for preserving data
-    final currentStateSnapshot = state;
-    ProfileLoaded? existingState;
-    // Only consider non-skeleton loaded states as existing (skeleton states should be replaced)
-    if (currentStateSnapshot is ProfileLoaded && 
-        currentStateSnapshot.profile.username == event.userIdentifier &&
-        !currentStateSnapshot.isSkeleton &&
-        currentStateSnapshot.profile.id != 0) {
-      existingState = currentStateSnapshot;
-      debugPrint('ProfileBloc: Found existing non-skeleton state for ${event.userIdentifier}, posts=${existingState.posts.length}, followingInfo=${existingState.followingInfo != null}');
-    }
-
-    // Set loading flag
-    _loadingProfiles[loadingKey] = true;
+    _isLoadingProfile = true;
 
     try {
-      // If we have existing profile for this user, keep it visible
-      // Only show loading if there's no existing profile
-      if (existingState != null && !event.forceRefresh) {
-        emit(existingState.copyWith(isRefreshing: true));
-        debugPrint('ProfileBloc: Keeping existing profile visible, setting isRefreshing=true');
-      } else if (existingState == null) {
+      // Always emit loading state for fresh loads (not for refresh overlay)
+      if (!isRefreshing) {
         emit(ProfileLoading());
-        debugPrint('ProfileBloc: Emitting ProfileLoading state');
-      } else {
-        // forceRefresh with existing profile - still show it but mark as refreshing
-        emit(existingState.copyWith(isRefreshing: true));
-        debugPrint('ProfileBloc: Force refresh with existing profile, setting isRefreshing=true');
       }
 
+      // Load profile data using use case
       final profile = await _fetchProfileUseCase.execute(
-        event.userIdentifier,
-        forceRefresh: event.forceRefresh,
+        userIdentifier,
+        forceRefresh: forceRefresh,
       );
-      debugPrint('ProfileBloc: Profile loaded successfully - id=${profile.id}, username=${profile.username}, name=${profile.name}');
-
-      final isOwnProfile = _isOwnProfile(event.userIdentifier);
-      debugPrint('ProfileBloc: isOwnProfile=$isOwnProfile');
-
-      // CRITICAL FIX: Use the original existingState captured at the start, not latestState
-      // This ensures we preserve all data (posts, followingInfo, etc.) even if state changed during loading
-      // Only fall back to latestState if existingState was null (new profile)
-      ProfileLoaded? stateToUpdate;
-      if (existingState != null) {
-        // Use the original existingState to preserve all data
-        stateToUpdate = existingState;
-        debugPrint('ProfileBloc: Using original existingState to preserve data');
-      } else {
-        // For new profiles, check latest state (might have been set by skeleton)
-        final latestState = state;
-        if (latestState is ProfileLoaded && latestState.profile.username == event.userIdentifier) {
-          stateToUpdate = latestState;
-          debugPrint('ProfileBloc: Using latestState for new profile');
-        }
-      }
-
-      // Always update profile completely, preserving all existing data (posts, pinnedPost, followingInfo)
-      ProfileLoaded updatedProfileState;
-      if (stateToUpdate != null) {
-        // Explicitly preserve all data: posts, pinnedPost, followingInfo, stats, etc.
-        updatedProfileState = stateToUpdate.copyWith(
-          profile: profile, // Always update profile with fresh data (includes banner)
-          isRefreshing: false,
-          postsError: false,
-          postsErrorMessage: null,
-          isSkeleton: false, // Explicitly remove skeleton when profile is loaded
-          // Explicitly preserve: posts, pinnedPost, followingInfo, stats are preserved by copyWith
-        );
-        emit(updatedProfileState);
-        debugPrint('ProfileBloc: Updated profile, preserved posts count=${stateToUpdate.posts.length}, pinnedPost=${stateToUpdate.pinnedPost != null}, followingInfo=${stateToUpdate.followingInfo != null}');
-      } else {
-        updatedProfileState = ProfileLoaded(
-          profile: profile,
-          isOwnProfile: isOwnProfile,
-          isRefreshing: false,
-          isSkeleton: false, // Explicitly set to false to remove skeleton
-        );
-        emit(updatedProfileState);
-        debugPrint('ProfileBloc: Created new ProfileLoaded state');
-      }
-      
-      // Update stack entry with loaded profile
-      _updateStackEntryWithState(updatedProfileState);
-      
-      debugPrint('ProfileBloc: Emitted ProfileLoaded state with updated profile (banner: ${profile.bannerUrl}, background: ${profile.profileBackgroundUrl})');
-
-      // Load posts sequentially after profile is loaded and state is updated
-      // This ensures posts are loaded with correct profile state
-      // Only load posts if forceRefresh is true OR if we don't have posts yet
-      final finalState = state;
-      if (finalState is ProfileLoaded) {
-        final shouldLoadPosts = event.forceRefresh || finalState.posts.isEmpty;
-        if (shouldLoadPosts) {
-          await _loadProfilePostsSequentially(profile.id.toString(), event.forceRefresh, emit);
-        } else {
-          debugPrint('ProfileBloc: Skipping posts load - already have posts and not forceRefresh');
-        }
-      } else {
-        await _loadProfilePostsSequentially(profile.id.toString(), event.forceRefresh, emit);
-      }
-
-    } catch (e) {
-      debugPrint('ProfileBloc: Error loading profile - ${e.toString()}');
-      // Get current state to preserve data
-      final errorState = state;
-      if (errorState is ProfileLoaded && errorState.profile.username == event.userIdentifier) {
-        emit(errorState.copyWith(
-          isRefreshing: false,
-        ));
-        // Error will be shown via snackbar or other UI mechanism
-      } else {
-        emit(ProfileError('Не удалось загрузить профиль: ${e.toString()}'));
-      }
-    } finally {
-      // Clear loading flag
-      _loadingProfiles[loadingKey] = false;
-    }
-  }
-
-  /// Helper method to load posts sequentially after profile is loaded
-  Future<void> _loadProfilePostsSequentially(String userId, bool forceRefresh, Emitter<ProfileState> emit) async {
-    // Check if already loading posts for this user
-    if (_loadingPosts[userId] == true) {
-      debugPrint('ProfileBloc: Posts for userId=$userId are already loading, skipping');
-      return;
-    }
-
-    _loadingPosts[userId] = true;
-
-    try {
-      final currentState = state;
-      if (currentState is! ProfileLoaded) {
-        debugPrint('ProfileBloc: Cannot load posts - current state is not ProfileLoaded: ${currentState.runtimeType}');
-        return;
-      }
-
-      debugPrint('ProfileBloc: Loading posts sequentially for userId=$userId, forceRefresh=$forceRefresh');
-      emit(currentState.copyWith(isLoadingPosts: true, postsError: false, postsErrorMessage: null));
 
       // Load posts and pinned post concurrently
-      final [response, pinnedPost] = await Future.wait([
-        _repository.fetchUserPosts(
-          userId: userId,
-          page: 1,
-          perPage: 10,
-          forceRefresh: forceRefresh,
-        ),
-        _fetchPinnedPostUseCase.execute(currentState.profile.username),
+      final postsFuture = _repository.fetchUserPosts(
+        userId: profile.id.toString(),
+        page: 1,
+        perPage: 10,
+        forceRefresh: forceRefresh,
+      );
+
+      final pinnedPostFuture = _fetchPinnedPostUseCase.execute(profile.username);
+
+      final [postsResponse, pinnedPost] = await Future.wait([
+        postsFuture,
+        pinnedPostFuture,
       ]);
 
-      // Get latest state to ensure we have the most recent profile data
-      final latestState = state;
-      if (latestState is! ProfileLoaded) {
-        debugPrint('ProfileBloc: State changed during posts loading, aborting');
-        return;
+      final ProfilePostsResponse posts = postsResponse as ProfilePostsResponse;
+      final Post? pinned = pinnedPost as Post?;
+
+      // Filter out pinned post from regular posts
+      final filteredPosts = pinned != null
+          ? posts.posts.where((post) => post.id != pinned.id).toList()
+          : posts.posts;
+
+      // Load following info
+      FollowingInfo? followingInfo;
+      if (_currentUserDBId != null) {
+        try {
+          followingInfo = await _repository.fetchFollowingInfoWithFollowers(
+            profileId: profile.id.toString(),
+            currentUserId: _currentUserDBId!,
+          );
+        } catch (e) {
+          debugPrint('ProfileBloc: Failed to load following info: $e');
+          // Continue without following info - it's optional
+        }
       }
 
-      // Filter out pinned post from regular posts if it exists
-      final ProfilePostsResponse originalResponse = response as ProfilePostsResponse;
-      final Post? pinnedPostTyped = pinnedPost as Post?;
-      final filteredResponse = pinnedPostTyped != null
-          ? ProfilePostsResponse(
-              posts: originalResponse.posts
-                  .where((post) => post.id != pinnedPostTyped.id)
-                  .toList(),
-              hasNext: originalResponse.hasNext,
-              hasPrev: originalResponse.hasPrev,
-              page: originalResponse.page,
-              pages: originalResponse.pages,
-              perPage: originalResponse.perPage,
-              total: originalResponse.total,
-            )
-          : originalResponse;
-
-      // Update state preserving profile and all other data
-      final updatedState = latestState.copyWith(
+      // Emit loaded state with complete data
+      final loadedState = ProfileLoaded(
+        profile: profile,
+        isOwnProfile: false,
+        posts: filteredPosts,
+        hasNextPosts: posts.hasNext,
+        currentPostsPage: posts.page,
+        postsPerPage: posts.perPage,
+        pinnedPost: pinned,
+        followingInfo: followingInfo,
+        isRefreshing: false,
+        postsError: false,
         isLoadingPosts: false,
-        pinnedPost: pinnedPost,
-      ).setPosts(filteredResponse);
+      );
 
-      debugPrint('ProfileBloc: Posts loaded successfully - count=${filteredResponse.posts.length}, hasNext=${filteredResponse.hasNext}');
-      emit(updatedState);
-      
-      // Update stack entry with loaded posts
-      _updateStackEntryWithState(updatedState);
+      emit(loadedState);
 
-      // Load following info sequentially after posts are loaded
-      await _loadFollowingInfoSequentially(latestState.profile.id.toString(), latestState.profile.username, latestState.isOwnProfile, emit);
+      debugPrint('ProfileBloc: Successfully loaded other profile ${profile.username} with ${filteredPosts.length} posts');
 
     } catch (e) {
-      debugPrint('ProfileBloc: Error loading posts - ${e.toString()}');
-      final currentState = state;
-      if (currentState is ProfileLoaded) {
-        emit(currentState.copyWith(
-          isLoadingPosts: false,
-          postsError: true,
-          postsErrorMessage: 'Не удалось загрузить посты: ${e.toString()}',
-        ));
+      debugPrint('ProfileBloc: Error loading other profile: $e');
+
+      // Emit error state
+      if (!isRefreshing) {
+        emit(ProfileError('Не удалось загрузить профиль: ${e.toString()}'));
+      } else {
+        // For refresh failures, emit error but keep existing data if available
+        final currentState = state;
+        if (currentState is ProfileLoaded) {
+          emit(currentState.copyWith(
+            isRefreshing: false,
+            postsError: true,
+            postsErrorMessage: 'Не удалось обновить данные: ${e.toString()}',
+          ));
+        } else {
+          emit(ProfileError('Не удалось загрузить профиль: ${e.toString()}'));
+        }
       }
     } finally {
-      _loadingPosts[userId] = false;
+      _isLoadingProfile = false;
     }
   }
 
-  /// Helper method to load following info sequentially after posts are loaded
-  Future<void> _loadFollowingInfoSequentially(String profileId, String username, bool isOwnProfile, Emitter<ProfileState> emit) async {
-    // Always load following info to get is_self from API, even for own profile
-    // This is needed because API might return is_self: true even when isOwnProfile is false
-    if (_currentUserDBId == null) {
-      debugPrint('ProfileBloc: Skipping following info - currentUserDBId is null');
+  /// Load profile data for current user (own profile) - uses different loading logic
+  Future<void> _loadCurrentProfileData(bool forceRefresh, Emitter<ProfileState> emit, {bool isRefreshing = false}) async {
+    if (_isLoadingProfile) {
+      debugPrint('ProfileBloc: Already loading current profile, skipping');
       return;
     }
 
-    try {
-      debugPrint('ProfileBloc: Loading following info sequentially for profileId=$profileId, isOwnProfile=$isOwnProfile');
-      final followingInfo = await _repository.fetchFollowingInfoWithFollowers(
-        profileId: profileId,
-        currentUserId: _currentUserDBId!,
-      );
-      debugPrint('ProfileBloc: Following info loaded successfully, isSelf=${followingInfo.isSelf}');
+    _isLoadingProfile = true;
 
-      // Get latest state to preserve all data
-      final currentState = state;
-      if (currentState is ProfileLoaded) {
-        // Preserve all data: profile, posts, pinnedPost, etc.
-        final updatedState = currentState.copyWith(followingInfo: followingInfo);
-        emit(updatedState);
-        
-        // Update stack entry with loaded followingInfo
-        _updateStackEntryWithState(updatedState);
+    try {
+      // Always emit loading state for fresh loads (not for refresh overlay)
+      if (!isRefreshing) {
+        emit(ProfileLoading());
       }
+
+      // Load current profile data using direct repository call (includes all profile fields)
+      final profile = await _repository.fetchCurrentUserProfile(
+        forceRefresh: forceRefresh,
+      );
+
+      // Load stats
+      final stats = await _repository.fetchUserStats(profile.username);
+
+      // Load posts and pinned post concurrently
+      final postsFuture = _repository.fetchUserPosts(
+        userId: profile.id.toString(),
+        page: 1,
+        perPage: 10,
+        forceRefresh: forceRefresh,
+      );
+
+      final pinnedPostFuture = _fetchPinnedPostUseCase.execute(profile.username);
+
+      final [postsResponse, pinnedPost] = await Future.wait([
+        postsFuture,
+        pinnedPostFuture,
+      ]);
+
+      final ProfilePostsResponse posts = postsResponse as ProfilePostsResponse;
+      final Post? pinned = pinnedPost as Post?;
+
+      // Filter out pinned post from regular posts
+      final filteredPosts = pinned != null
+          ? posts.posts.where((post) => post.id != pinned.id).toList()
+          : posts.posts;
+
+      // Emit loaded state with complete data for own profile
+      final loadedState = ProfileLoaded(
+        profile: profile,
+        isOwnProfile: true,
+        stats: stats,
+        posts: filteredPosts,
+        hasNextPosts: posts.hasNext,
+        currentPostsPage: posts.page,
+        postsPerPage: posts.perPage,
+        pinnedPost: pinned,
+        followingInfo: null, // Own profile doesn't need following info
+        isRefreshing: false,
+        postsError: false,
+        isLoadingPosts: false,
+      );
+
+      debugPrint('ProfileBloc: Emitting loaded state for current profile ${profile.username}, name: ${profile.name}, isRefreshing: false');
+      emit(loadedState);
+
+      debugPrint('ProfileBloc: Successfully loaded current profile ${profile.username} with ${filteredPosts.length} posts');
+
     } catch (e) {
-      debugPrint('ProfileBloc: Failed to fetch following info: $e');
-      // Don't emit error for following info - it's optional data
-      // But if it's own profile, we can create a FollowingInfo with isSelf=true as fallback
-      if (isOwnProfile) {
+      debugPrint('ProfileBloc: Error loading current profile: $e');
+
+      // Emit error state
+      if (!isRefreshing) {
+        emit(ProfileError('Не удалось загрузить профиль: ${e.toString()}'));
+      } else {
+        // For refresh failures, emit error but keep existing data if available
         final currentState = state;
         if (currentState is ProfileLoaded) {
-          final fallbackFollowingInfo = FollowingInfo(
-            currentUserFollows: false,
-            currentUserIsFriend: false,
-            followsBack: false,
-            isSelf: true,
-          );
-          emit(currentState.copyWith(followingInfo: fallbackFollowingInfo));
+          emit(currentState.copyWith(
+            isRefreshing: false,
+            postsError: true,
+            postsErrorMessage: 'Не удалось обновить данные: ${e.toString()}',
+          ));
+        } else {
+          emit(ProfileError('Не удалось загрузить профиль: ${e.toString()}'));
         }
       }
+    } finally {
+      _isLoadingProfile = false;
+    }
+  }
+
+  void _onLoadProfile(LoadProfileEvent event, Emitter<ProfileState> emit) async {
+    debugPrint('ProfileBloc: _onLoadProfile called for ${event.userIdentifier}');
+    if (_isOwnProfile(event.userIdentifier)) {
+      await _loadCurrentProfileData(event.forceRefresh, emit);
+    } else {
+      await _loadOtherProfileData(event.userIdentifier, event.forceRefresh, emit);
     }
   }
 
   void _onLoadCurrentProfile(LoadCurrentProfileEvent event, Emitter<ProfileState> emit) async {
-    debugPrint('ProfileBloc: _onLoadCurrentProfile called with forceRefresh=${event.forceRefresh}');
+    debugPrint('ProfileBloc: _onLoadCurrentProfile called');
+    await _loadCurrentProfileData(event.forceRefresh, emit);
+  }
 
-    // Use 'current' as identifier for loading flags
-    const loadingKey = 'current';
-    if (_loadingProfiles[loadingKey] == true) {
-      debugPrint('ProfileBloc: Current profile is already loading, skipping');
-      return;
-    }
+  /// Simplified refresh - always loads fresh data
+  void _onRefreshProfile(RefreshProfileEvent event, Emitter<ProfileState> emit) async {
+    debugPrint('ProfileBloc: _onRefreshProfile called');
 
-    // Capture current state snapshot at the start
-    final currentStateSnapshot = state;
-    ProfileLoaded? existingState;
-    if (currentStateSnapshot is ProfileLoaded && currentStateSnapshot.isOwnProfile) {
-      existingState = currentStateSnapshot;
-    }
+    final currentState = state;
+    if (currentState is ProfileLoaded) {
+      debugPrint('ProfileBloc: Starting refresh for profile ${currentState.profile.username}, current name: ${currentState.profile.name}');
 
-    // Set loading flag
-    _loadingProfiles[loadingKey] = true;
-
-    try {
-      // If we have existing own profile, keep it visible
-      // Only show loading if there's no existing profile
-      if (existingState != null && !event.forceRefresh) {
-        emit(existingState.copyWith(isRefreshing: true));
-        debugPrint('ProfileBloc: Keeping existing own profile visible, setting isRefreshing=true');
-      } else if (existingState == null) {
-        emit(ProfileLoading());
-        debugPrint('ProfileBloc: Emitting ProfileLoading state for current profile');
+      // Clear cache first to ensure fresh data
+      if (currentState.isOwnProfile) {
+        await _repository.clearUserCache('current');
+        debugPrint('ProfileBloc: Cleared current user cache');
       } else {
-        // forceRefresh with existing profile - still show it but mark as refreshing
-        emit(existingState.copyWith(isRefreshing: true));
-        debugPrint('ProfileBloc: Force refresh with existing own profile, setting isRefreshing=true');
+        await _repository.clearUserCache(currentState.profile.username);
+        debugPrint('ProfileBloc: Cleared user cache for ${currentState.profile.username}');
       }
 
-      final profile = await _repository.fetchCurrentUserProfile(
-        forceRefresh: event.forceRefresh,
-      );
+      // Start refresh - show loading overlay but keep existing data visible
+      final refreshingState = currentState.copyWith(isRefreshing: true);
+      emit(refreshingState);
+      debugPrint('ProfileBloc: Emitted refreshing state');
 
-      final stats = await _repository.fetchUserStats(profile.username);
-
-      // Get current state again to ensure we have latest data
-      final latestState = state;
-      ProfileLoaded? latestExistingState;
-      if (latestState is ProfileLoaded && latestState.isOwnProfile) {
-        latestExistingState = latestState;
+      try {
+        if (currentState.isOwnProfile) {
+          await _loadCurrentProfileData(true, emit, isRefreshing: true);
+        } else {
+          await _loadOtherProfileData(currentState.profile.username, true, emit, isRefreshing: true);
+        }
+      } catch (e) {
+        debugPrint('ProfileBloc: Error during refresh: $e');
+        // On error, emit state with isRefreshing=false to hide loading overlay
+        if (state is ProfileLoaded) {
+          emit((state as ProfileLoaded).copyWith(isRefreshing: false));
+        }
+        rethrow;
       }
-
-      // Always update profile completely, preserving all existing data (posts, pinnedPost, followingInfo)
-      if (latestExistingState != null) {
-        // Explicitly preserve all data: posts, pinnedPost, followingInfo, etc.
-        emit(latestExistingState.copyWith(
-          profile: profile, // Always update profile with fresh data (includes banner)
-          stats: stats,
-          isRefreshing: false,
-          postsError: false,
-          postsErrorMessage: null,
-          isSkeleton: false, // Explicitly remove skeleton when profile is loaded
-          // Explicitly preserve: posts, pinnedPost, followingInfo are preserved by copyWith
-        ));
-        debugPrint('ProfileBloc: Updated current profile, preserved posts count=${latestExistingState.posts.length}, pinnedPost=${latestExistingState.pinnedPost != null}');
-      } else {
-        final profileLoaded = ProfileLoaded(
-          profile: profile,
-          isOwnProfile: true,
-          stats: stats,
-          isRefreshing: false,
-          isSkeleton: false, // Explicitly set to false to remove skeleton
-        );
-        emit(profileLoaded);
-      }
-      debugPrint('ProfileBloc: Emitted ProfileLoaded state with updated current profile (banner: ${profile.bannerUrl}, background: ${profile.profileBackgroundUrl})');
-
-      // Load posts sequentially after profile is loaded and state is updated
-      // This ensures posts are loaded with correct profile state
-      await _loadProfilePostsSequentially(profile.id.toString(), event.forceRefresh, emit);
-
-    } catch (e) {
-      debugPrint('ProfileBloc: Error loading current profile - ${e.toString()}');
-      // Get current state to preserve data
-      final errorState = state;
-      if (errorState is ProfileLoaded && errorState.isOwnProfile) {
-        emit(errorState.copyWith(
-          isRefreshing: false,
-        ));
-        // Error will be shown via snackbar or other UI mechanism
-      } else {
-        emit(ProfileError('Не удалось загрузить профиль: ${e.toString()}'));
-      }
-    } finally {
-      // Clear loading flag
-      _loadingProfiles[loadingKey] = false;
+    } else {
+      // No current profile loaded, do full load
+      debugPrint('ProfileBloc: No current profile loaded, doing full load');
+      add(LoadCurrentProfileEvent(forceRefresh: true));
     }
   }
 
@@ -494,9 +368,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         await _updateProfileUseCase.updateUsername(event.username);
         await _updateProfileUseCase.updateAbout(event.about);
 
-        // Refresh profile
-        final profile = await _repository.fetchCurrentUserProfile(forceRefresh: true);
-        emit(ProfileUpdated(profile));
+        // After update, trigger complete reload of profile data
+        await _loadCurrentProfileData(true, emit);
       }
     } catch (e) {
       emit(ProfileError('Не удалось обновить профиль: ${e.toString()}'));
@@ -508,7 +381,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final currentState = state;
       if (currentState is ProfileLoaded && currentState.isOwnProfile) {
         await _updateProfileUseCase.updateStatus(event.statusText, event.statusColor);
-        emit(ProfileUpdated(currentState.profile, 'Статус профиля обновлен'));
+
+        // Trigger complete reload after status update
+        add(RefreshProfileEvent(forceRefresh: true));
       }
     } catch (e) {
       emit(ProfileError('Не удалось обновить статус: ${e.toString()}'));
@@ -520,10 +395,26 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final currentState = state;
       if (currentState is ProfileLoaded && currentState.isOwnProfile) {
         await _updateProfileUseCase.updateAvatar(event.avatarPath);
-        emit(ProfileUpdated(currentState.profile, 'Аватар обновлен'));
+
+        // Trigger complete reload after avatar update
+        add(RefreshProfileEvent(forceRefresh: true));
       }
     } catch (e) {
       emit(ProfileError('Не удалось обновить аватар: ${e.toString()}'));
+    }
+  }
+
+  void _onUpdateProfileBanner(UpdateProfileBannerEvent event, Emitter<ProfileState> emit) async {
+    try {
+      final currentState = state;
+      if (currentState is ProfileLoaded && currentState.isOwnProfile) {
+        await _updateProfileUseCase.updateBanner(event.bannerPath);
+
+        // Trigger complete reload after banner update
+        add(RefreshProfileEvent(forceRefresh: true));
+      }
+    } catch (e) {
+      emit(ProfileError('Не удалось обновить баннер: ${e.toString()}'));
     }
   }
 
@@ -532,10 +423,26 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final currentState = state;
       if (currentState is ProfileLoaded && currentState.isOwnProfile) {
         await _updateProfileUseCase.deleteAvatar();
-        emit(ProfileUpdated(currentState.profile, 'Аватар удален'));
+
+        // Trigger complete reload after avatar deletion
+        add(RefreshProfileEvent(forceRefresh: true));
       }
     } catch (e) {
       emit(ProfileError('Не удалось удалить аватар: ${e.toString()}'));
+    }
+  }
+
+  void _onDeleteProfileBanner(DeleteProfileBannerEvent event, Emitter<ProfileState> emit) async {
+    try {
+      final currentState = state;
+      if (currentState is ProfileLoaded && currentState.isOwnProfile) {
+        await _updateProfileUseCase.deleteBanner();
+
+        // Trigger complete reload after banner deletion
+        add(RefreshProfileEvent(forceRefresh: true));
+      }
+    } catch (e) {
+      emit(ProfileError('Не удалось удалить баннер: ${e.toString()}'));
     }
   }
 
@@ -544,7 +451,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final currentState = state;
       if (currentState is ProfileLoaded && currentState.isOwnProfile) {
         await _updateProfileUseCase.addSocialLink(event.name, event.link);
-        emit(ProfileUpdated(currentState.profile, 'Ссылка добавлена'));
+
+        // Trigger complete reload after social link addition
+        add(RefreshProfileEvent(forceRefresh: true));
       }
     } catch (e) {
       emit(ProfileError('Не удалось добавить ссылку: ${e.toString()}'));
@@ -556,7 +465,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final currentState = state;
       if (currentState is ProfileLoaded && currentState.isOwnProfile) {
         await _updateProfileUseCase.deleteSocialLink(event.name);
-        emit(ProfileUpdated(currentState.profile, 'Ссылка удалена'));
+
+        // Trigger complete reload after social link deletion
+        add(RefreshProfileEvent(forceRefresh: true));
       }
     } catch (e) {
       emit(ProfileError('Не удалось удалить ссылку: ${e.toString()}'));
@@ -572,7 +483,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     try {
       final response = await _followUserUseCase.follow(currentState.profile.id);
 
-      // Update following info using API response data
+      // Update following info based on API response
       final updatedFollowingInfo = FollowingInfo(
         currentUserFollows: response['is_following'] ?? false,
         currentUserIsFriend: response['is_friend'] ?? false,
@@ -583,7 +494,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final updatedState = currentState.copyWith(followingInfo: updatedFollowingInfo);
       emit(updatedState);
     } catch (e) {
-      // Silently ignore API errors for follow/unfollow actions
       debugPrint('Failed to follow user: ${e.toString()}');
     }
   }
@@ -597,7 +507,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     try {
       final response = await _followUserUseCase.unfollow(currentState.profile.id);
 
-      // Update following info using API response data
+      // Update following info based on API response
       final updatedFollowingInfo = FollowingInfo(
         currentUserFollows: response['is_following'] ?? false,
         currentUserIsFriend: response['is_friend'] ?? false,
@@ -608,7 +518,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final updatedState = currentState.copyWith(followingInfo: updatedFollowingInfo);
       emit(updatedState);
     } catch (e) {
-      // Silently ignore API errors for follow/unfollow actions
       debugPrint('Failed to unfollow user: ${e.toString()}');
     }
   }
@@ -630,136 +539,159 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     }
   }
 
-  void _onRefreshProfile(RefreshProfileEvent event, Emitter<ProfileState> emit) async {
-    debugPrint('ProfileBloc: _onRefreshProfile called with forceRefresh=${event.forceRefresh}');
-    final currentState = state;
-    if (currentState is ProfileLoaded) {
-      debugPrint('ProfileBloc: Refreshing profile, isOwnProfile=${currentState.isOwnProfile}, isSkeleton=${currentState.isSkeleton}, posts count=${currentState.posts.length}');
-      
-      // If skeleton, we still need to load the profile
-      // Check if we have a valid profile ID (not 0, which is skeleton)
-      final hasValidProfile = currentState.profile.id != 0;
-      
-      // Trigger a complete refresh of both profile and posts
-      if (currentState.isOwnProfile) {
-        debugPrint('ProfileBloc: Adding LoadCurrentProfileEvent');
-        add(LoadCurrentProfileEvent(forceRefresh: event.forceRefresh));
-      } else if (hasValidProfile) {
-        // For other profiles with valid profile, reload with force refresh
-        debugPrint('ProfileBloc: Adding LoadProfileEvent for ${currentState.profile.username}');
-        add(LoadProfileEvent(currentState.profile.username, forceRefresh: event.forceRefresh));
-      } else {
-        // Skeleton profile - try to load by username from skeleton
-        debugPrint('ProfileBloc: Skeleton profile detected, loading by username: ${currentState.profile.username}');
-        add(LoadProfileEvent(currentState.profile.username, forceRefresh: true));
-      }
-
-      // Force reload posts if we have a valid profile ID
-      if (hasValidProfile) {
-        debugPrint('ProfileBloc: Adding LoadProfilePostsEvent for userId=${currentState.profile.id}');
-        add(LoadProfilePostsEvent(currentState.profile.id.toString(), forceRefresh: event.forceRefresh));
-      }
-    } else {
-      debugPrint('ProfileBloc: Current state is not ProfileLoaded: ${currentState.runtimeType}');
-    }
-  }
-
   void _onClearProfileCache(ClearProfileCacheEvent event, Emitter<ProfileState> emit) async {
     try {
       await _repository.clearCache();
-      emit(ProfileInitial()); // Reset to initial state
+      emit(ProfileInitial());
     } catch (e) {
       emit(ProfileError('Не удалось очистить кеш: ${e.toString()}'));
     }
   }
 
   void _onLoadProfilePosts(LoadProfilePostsEvent event, Emitter<ProfileState> emit) async {
-    debugPrint('ProfileBloc: _onLoadProfilePosts called with userId=${event.userId}, forceRefresh=${event.forceRefresh}');
-    // Use the sequential loading method to ensure data consistency
-    await _loadProfilePostsSequentially(event.userId, event.forceRefresh, emit);
+    debugPrint('ProfileBloc: _onLoadProfilePosts called');
+
+    if (_isLoadingPosts) {
+      debugPrint('ProfileBloc: Already loading posts, skipping');
+      return;
+    }
+
+    _isLoadingPosts = true;
+
+    try {
+      final currentState = state;
+      if (currentState is! ProfileLoaded) {
+        debugPrint('ProfileBloc: Cannot load posts - not in loaded state');
+        return;
+      }
+
+      emit(currentState.copyWith(isLoadingPosts: true, postsError: false, postsErrorMessage: null));
+
+      // Load posts and pinned post concurrently
+      final [postsResponse, pinnedPost] = await Future.wait([
+        _repository.fetchUserPosts(
+          userId: currentState.profile.id.toString(),
+          page: 1,
+          perPage: 10,
+          forceRefresh: event.forceRefresh,
+        ),
+        _fetchPinnedPostUseCase.execute(currentState.profile.username),
+      ]);
+
+      final ProfilePostsResponse posts = postsResponse as ProfilePostsResponse;
+      final Post? pinned = pinnedPost as Post?;
+
+      // Filter out pinned post from regular posts
+      final filteredPosts = pinned != null
+          ? posts.posts.where((post) => post.id != pinned.id).toList()
+          : posts.posts;
+
+      final updatedState = currentState.copyWith(
+        posts: filteredPosts,
+        hasNextPosts: posts.hasNext,
+        currentPostsPage: posts.page,
+        pinnedPost: pinned,
+        isLoadingPosts: false,
+      );
+
+      emit(updatedState);
+
+    } catch (e) {
+      debugPrint('ProfileBloc: Error loading posts: $e');
+      final currentState = state;
+      if (currentState is ProfileLoaded) {
+        emit(currentState.copyWith(
+          isLoadingPosts: false,
+          postsError: true,
+          postsErrorMessage: 'Не удалось загрузить посты: ${e.toString()}',
+        ));
+      }
+    } finally {
+      _isLoadingPosts = false;
+    }
   }
 
   void _onFetchMoreProfilePosts(FetchMoreProfilePostsEvent event, Emitter<ProfileState> emit) async {
     final currentState = state;
-    if (currentState is ProfileLoaded && !currentState.isLoadingPosts && currentState.hasNextPosts) {
-      try {
-        emit(currentState.copyWith(isLoadingPosts: true));
+    if (currentState is! ProfileLoaded || currentState.isLoadingPosts || !currentState.hasNextPosts) {
+      return;
+    }
 
-        final response = await _fetchUserPostsUseCase.execute(
-          userId: event.userId,
-          page: event.page,
-          perPage: event.perPage,
-        );
+    try {
+      emit(currentState.copyWith(isLoadingPosts: true));
 
-        // Filter out pinned post from additional posts if it exists
-        final ProfilePostsResponse originalResponse = response;
-        final filteredResponse = currentState.pinnedPost != null
-            ? ProfilePostsResponse(
-                posts: originalResponse.posts
-                    .where((post) => post.id != currentState.pinnedPost!.id)
-                    .toList(),
-                hasNext: originalResponse.hasNext,
-                hasPrev: originalResponse.hasPrev,
-                page: originalResponse.page,
-                pages: originalResponse.pages,
-                perPage: originalResponse.perPage,
-                total: originalResponse.total,
-              )
-            : originalResponse;
+      final response = await _fetchUserPostsUseCase.execute(
+        userId: event.userId,
+        page: event.page,
+        perPage: event.perPage,
+      );
 
-        emit(currentState.copyWith(
-          isLoadingPosts: false,
-        ).addPosts(filteredResponse));
-      } catch (e) {
-        final loadedState = state;
-        if (loadedState is ProfileLoaded) {
-          emit(loadedState.copyWith(isLoadingPosts: false));
-        }
-        // Don't emit global error - just set posts error in state (for paging, we don't change to error state)
-        // For pagination errors, we just stop loading - the user can refresh if needed
+      // Filter out pinned post if it exists
+      final ProfilePostsResponse posts = response;
+      final filteredPosts = currentState.pinnedPost != null
+          ? posts.posts.where((post) => post.id != currentState.pinnedPost!.id).toList()
+          : posts.posts;
+
+      emit(currentState.copyWith(
+        isLoadingPosts: false,
+      ).addPosts(ProfilePostsResponse(
+        posts: filteredPosts,
+        hasNext: posts.hasNext,
+        hasPrev: posts.hasPrev,
+        page: posts.page,
+        pages: posts.pages,
+        perPage: posts.perPage,
+        total: posts.total,
+      )));
+    } catch (e) {
+      final loadedState = state;
+      if (loadedState is ProfileLoaded) {
+        emit(loadedState.copyWith(isLoadingPosts: false));
       }
     }
   }
 
   void _onLoadFollowingInfo(LoadFollowingInfoEvent event, Emitter<ProfileState> emit) async {
     final currentState = state;
-    if (currentState is ProfileLoaded && !currentState.isOwnProfile) {
-      try {
-        final followingInfo = await _repository.fetchFollowingInfo(
-          profileId: event.profileId,
-          currentUserId: event.currentUserId,
-        );
+    if (currentState is! ProfileLoaded || currentState.isOwnProfile) {
+      return;
+    }
 
-        emit(currentState.copyWith(followingInfo: followingInfo));
-      } catch (e) {
-        // Don't emit error for following info - it's optional data
-      }
+    try {
+      final followingInfo = await _repository.fetchFollowingInfo(
+        profileId: event.profileId,
+        currentUserId: event.currentUserId,
+      );
+
+      emit(currentState.copyWith(followingInfo: followingInfo));
+    } catch (e) {
+      // Following info is optional, don't emit error
     }
   }
 
   void _onLoadFollowingInfoWithFollowers(LoadFollowingInfoWithFollowersEvent event, Emitter<ProfileState> emit) async {
-    debugPrint('ProfileBloc: _onLoadFollowingInfoWithFollowers called for profileId=${event.profileId}, currentUserId=${event.currentUserId}');
-    
-    // Get current state snapshot
-    final currentStateSnapshot = state;
-    if (currentStateSnapshot is! ProfileLoaded || currentStateSnapshot.isOwnProfile) {
-      debugPrint('ProfileBloc: Not loading following info - isLoaded=${currentStateSnapshot is ProfileLoaded}, isOwnProfile=${currentStateSnapshot is ProfileLoaded ? currentStateSnapshot.isOwnProfile : 'null'}');
+    final currentState = state;
+    if (currentState is! ProfileLoaded || currentState.isOwnProfile) {
       return;
     }
 
-    // Get username from current state to load following info
-    final username = currentStateSnapshot.profile.username;
-    final isOwnProfile = currentStateSnapshot.isOwnProfile;
-    
-    // Use the sequential loading method to ensure data consistency
-    await _loadFollowingInfoSequentially(event.profileId, username, isOwnProfile, emit);
+    try {
+      final followingInfo = await _repository.fetchFollowingInfoWithFollowers(
+        profileId: event.profileId,
+        currentUserId: event.currentUserId,
+      );
+
+      emit(currentState.copyWith(followingInfo: followingInfo));
+    } catch (e) {
+      // Following info is optional, don't emit error
+    }
   }
 
   Future<void> _onLikeProfilePost(LikeProfilePostEvent event, Emitter<ProfileState> emit) async {
     final currentState = state;
     if (currentState is! ProfileLoaded) return;
 
-    // Prevent concurrent likes for the same post
+    // Prevent concurrent likes
     if (currentState.processingLikes.contains(event.postId)) {
       return;
     }
@@ -783,7 +715,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         pinnedPost: optimisticPinnedPost,
       ));
 
-      // API call using shared LikePostUseCase
+      // API call
       final serverPost = await _likePostUseCase(event.postId);
 
       // Server response takes precedence
@@ -802,7 +734,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         processingLikes: currentState.processingLikes.where((id) => id != event.postId).toSet(),
       ));
     } catch (e) {
-      // Revert on error and remove from processing
+      // Revert on error
       final revertedPost = post.copyWith(
         isLiked: !post.isLiked,
         likesCount: post.isLiked ? post.likesCount - 1 : post.likesCount + 1,
@@ -819,104 +751,43 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     }
   }
 
+  /// Simplified profile stack management - removed complex validation logic
+  final List<ProfileStackEntry> _profileStack = [];
+
   void _onPushProfileStack(PushProfileStackEvent event, Emitter<ProfileState> emit) async {
     debugPrint('ProfileBloc: _onPushProfileStack called with username=${event.username}');
-    
-    // Prevent rapid repeated pushes for the same username (debounce)
-    final now = DateTime.now();
-    final lastPush = _lastPushTime[event.username];
-    if (lastPush != null && now.difference(lastPush).inMilliseconds < 100) {
-      debugPrint('ProfileBloc: Ignoring rapid PushProfileStackEvent for ${event.username} (debounced)');
-      return;
-    }
-    _lastPushTime[event.username] = now;
-    
-    // Check if already in stack to avoid duplicates
+
+    // Check if already in stack
     final existingIndex = _profileStack.indexWhere((entry) => entry.username == event.username);
     if (existingIndex != -1) {
-      // Move to existing entry
       final entry = _profileStack.removeAt(existingIndex);
       _profileStack.add(entry);
-      
-      // Emit current state immediately for smooth transition
-      final currentState = entry.state;
-      if (currentState is ProfileLoaded) {
-        // Validate state for this username
-        if (!currentState.isValidForUsername(event.username)) {
-          // State is invalid (skeleton or incomplete), reload it
-          emit(currentState.copyWith(isRefreshing: true));
-          debugPrint('ProfileBloc: Profile in stack is invalid for ${event.username}, will load');
-          add(LoadProfileEvent(event.username, forceRefresh: false));
-        } else if (currentState.isSkeleton || currentState.profile.id == 0) {
-          // Skeleton state - need to load
-          emit(currentState.copyWith(isRefreshing: true));
-          debugPrint('ProfileBloc: Profile in stack is skeleton, will load');
-          add(LoadProfileEvent(event.username, forceRefresh: false));
-        } else {
-          // Fully loaded profile - just emit it, no need to reload
-          emit(currentState);
-          debugPrint('ProfileBloc: Profile already fully loaded in stack, emitting as-is (posts=${currentState.posts.length}, followingInfo=${currentState.followingInfo != null})');
-          // Update stack entry with current state
-          _profileStack.last = ProfileStackEntry(username: event.username, state: currentState);
-          
-          // Check if posts need to be loaded
-          if (currentState.posts.isEmpty && !currentState.postsError && !currentState.isLoadingPosts) {
-            debugPrint('ProfileBloc: Profile loaded but posts missing, loading posts...');
-            _loadProfilePostsSequentially(
-              currentState.profile.id.toString(),
-              false,
-              emit,
-            );
-          }
-        }
-      } else {
-        emit(currentState);
-        // If it's not ProfileLoaded, try to load it
-        if (currentState is! ProfileLoading) {
-          add(LoadProfileEvent(event.username, forceRefresh: false));
-        }
-      }
-      
-      // Update stack entry with new state after a short delay to allow state to update
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (_profileStack.isNotEmpty && _profileStack.last.username == event.username) {
-          _profileStack.last = ProfileStackEntry(username: event.username, state: state);
-        }
-      });
+      emit(entry.state);
       return;
     }
 
-    // Create skeleton loading state for new profile
+    // Create loading state for new profile
     final skeletonState = ProfileLoaded(
       profile: createSkeletonProfile(event.username),
       isOwnProfile: false,
       isSkeleton: true,
     );
 
-    // Push to stack and emit loading state immediately
     _profileStack.add(ProfileStackEntry(username: event.username, state: skeletonState));
     emit(skeletonState);
 
-    // Use LoadProfileEvent to load the actual profile and posts sequentially
-    // This reuses the same logic and ensures consistency
+    // Load the profile
     try {
-      add(LoadProfileEvent(event.username, forceRefresh: false));
-      
-      // Update stack entry with loaded state after a short delay to allow state to update
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (_profileStack.isNotEmpty && _profileStack.last.username == event.username) {
-          _profileStack.last = ProfileStackEntry(username: event.username, state: state);
-        }
-      });
+      if (_isOwnProfile(event.username)) {
+        await _loadCurrentProfileData(false, emit);
+      } else {
+        await _loadOtherProfileData(event.username, false, emit);
+      }
     } catch (e) {
-      debugPrint('ProfileBloc: Error loading profile in _onPushProfileStack - ${e.toString()}');
-      // On error, replace skeleton with error state to prevent infinite skeleton
+      debugPrint('ProfileBloc: Error loading profile in _onPushProfileStack: $e');
       final errorState = ProfileError('Не удалось загрузить профиль: ${e.toString()}');
       if (_profileStack.isNotEmpty && _profileStack.last.username == event.username) {
         _profileStack.last = ProfileStackEntry(username: event.username, state: errorState);
-      } else {
-        // If stack was cleared or entry doesn't exist, add error state
-        _profileStack.add(ProfileStackEntry(username: event.username, state: errorState));
       }
       emit(errorState);
     }
@@ -925,58 +796,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   void _onPopProfileStack(PopProfileStackEvent event, Emitter<ProfileState> emit) {
     if (_profileStack.isNotEmpty) {
       _profileStack.removeLast();
-      // Only emit if stack is not empty after pop
       if (_profileStack.isNotEmpty) {
-        final restoredState = _currentState;
-        
-        // Emit state synchronously to avoid UI flickering
-        emit(restoredState);
-        
-        // Check if restored state is valid and complete
-        if (restoredState is ProfileLoaded) {
-          final stackEntry = _profileStack.last;
-          
-          // Validate state for the username in stack
-          if (!restoredState.isValidForUsername(stackEntry.username)) {
-            debugPrint('ProfileBloc: Restored state is invalid for ${stackEntry.username}, reloading...');
-            // State is invalid (skeleton or incomplete), reload it
-            add(LoadProfileEvent(stackEntry.username, forceRefresh: false));
-            return;
-          }
-          
-          // Check if state needs posts loading
-          if (restoredState.posts.isEmpty && !restoredState.postsError && !restoredState.isLoadingPosts && restoredState.profile.id != 0) {
-            debugPrint('ProfileBloc: Restored state has no posts, loading posts for profile id=${restoredState.profile.id}...');
-            // Posts are missing, load them using profile ID
-            _loadProfilePostsSequentially(
-              restoredState.profile.id.toString(),
-              false,
-              emit,
-            );
-          }
-          
-          // Check if state needs followingInfo loading (for other profiles only)
-          if (!restoredState.isOwnProfile && 
-              restoredState.followingInfo == null && 
-              restoredState.profile.id != 0 &&
-              _currentUserDBId != null) {
-            debugPrint('ProfileBloc: Restored state has no followingInfo, loading for profile id=${restoredState.profile.id}...');
-            // FollowingInfo is missing, load it
-            _loadFollowingInfoSequentially(
-              restoredState.profile.id.toString(),
-              restoredState.profile.username,
-              restoredState.isOwnProfile,
-              emit,
-            );
-          }
-        } else if (restoredState is ProfileInitial || restoredState is ProfileLoading) {
-          // If state is initial or loading, trigger load
-          final stackEntry = _profileStack.last;
-          debugPrint('ProfileBloc: Restored state is ${restoredState.runtimeType}, loading profile for ${stackEntry.username}...');
-          add(LoadProfileEvent(stackEntry.username, forceRefresh: false));
-        }
+        emit(_profileStack.last.state);
       } else {
-        // Stack is empty, emit initial state
         emit(ProfileInitial());
       }
     }
@@ -985,7 +807,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   void _onRetryProfilePosts(RetryProfilePostsEvent event, Emitter<ProfileState> emit) {
     final currentState = state;
     if (currentState is ProfileLoaded && currentState.postsError) {
-      // Reset posts error and retry loading
       emit(currentState.copyWith(postsError: false, postsErrorMessage: null, posts: []));
       add(LoadProfilePostsEvent(currentState.profile.id.toString(), forceRefresh: true));
     }

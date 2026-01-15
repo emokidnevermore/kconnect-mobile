@@ -58,17 +58,19 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen>
+    with TickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _slideUpAnimation;
+
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  double _dragStartX = 0;
-  bool _isDragging = false;
-  
   // Debounce timer for read receipts
   Timer? _readReceiptDebounceTimer;
   final Set<int> _pendingReadReceipts = {}; // messageId -> pending
-  
+
   // Flag to track if widget is disposed
   bool _isDisposed = false;
   
@@ -88,23 +90,43 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    // Load messages for this chat
-    context.read<MessagesBloc>().add(LoadChatMessagesEvent(widget.chat.id));
 
-    // Optimistically update UI immediately if there are unread messages
-    // Use addPostFrameCallback to ensure widgets are initialized
-    if (widget.chat.unreadCount > 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _slideUpAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    // Start animation and wait for completion before loading data
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _animationController.forward().then((_) {
+        // Load messages only after animation completes to prevent flickering
         if (mounted && !_isDisposed) {
-          // Update UI immediately for instant feedback
-          context.read<MessagesBloc>().add(MarkChatAsReadOptimisticallyEvent(chatId: widget.chat.id));
+          context.read<MessagesBloc>().add(LoadChatMessagesEvent(widget.chat.id));
+
+          // Optimistically update UI immediately if there are unread messages
+          if (widget.chat.unreadCount > 0) {
+            context.read<MessagesBloc>().add(MarkChatAsReadOptimisticallyEvent(chatId: widget.chat.id));
+            // Mark messages as read after loading (send read receipts)
+            _markMessagesAsReadAfterLoad();
+          }
         }
       });
-      
-      // Mark messages as read after loading (send read receipts)
-      _markMessagesAsReadAfterLoad();
-    }
-    
+    });
+
     // Listen to scroll events to mark messages as read when they become visible
     _scrollController.addListener(_onScroll);
   }
@@ -257,6 +279,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _isDisposed = true; // Mark as disposed to prevent read receipts
+    _animationController.dispose();
     _readReceiptDebounceTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _messageController.dispose();
@@ -493,27 +516,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _handleHorizontalDragStart(DragStartDetails details) {
-    _dragStartX = details.globalPosition.dx;
-    _isDragging = true;
-  }
 
-  void _handleHorizontalDragUpdate(DragUpdateDetails details) {
-    if (!_isDragging) return;
-
-    final currentX = details.globalPosition.dx;
-    final deltaX = currentX - _dragStartX;
-
-    // If dragging right with sufficient distance, dismiss
-    if (deltaX > 70) { // 70px threshold - easier to trigger
-      _isDragging = false;
-      Navigator.of(context).pop();
-    }
-  }
-
-  void _handleHorizontalDragEnd(DragEndDetails details) {
-    _isDragging = false;
-  }
 
   bool _isSomeoneTyping(MessagesState state) {
     final typingUsers = state.typingUsers[widget.chat.id] ?? {};
@@ -644,36 +647,40 @@ class _ChatScreenState extends State<ChatScreen> {
             behavior: HitTestBehavior.opaque,
             child: Scaffold(
             backgroundColor: Colors.transparent,
-            body: Stack(
-            fit: StackFit.expand,
-            children: [
+            body: AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) => Opacity(
+                opacity: _fadeAnimation.value,
+                child: Transform.translate(
+                  offset: Offset(0, _slideUpAnimation.value),
+                  child: child,
+                ),
+              ),
+              child: Stack(
+              fit: StackFit.expand,
+              children: [
               // AppBackground для всего экрана
               AppBackground(fallbackColor: Theme.of(context).colorScheme.surface),
               // Main content - занимает всё пространство, включая область под хедером и инпутом
               SafeArea(
                 bottom: true,
-                child: GestureDetector(
-                  onHorizontalDragStart: _handleHorizontalDragStart,
-                  onHorizontalDragUpdate: _handleHorizontalDragUpdate,
-                  onHorizontalDragEnd: _handleHorizontalDragEnd,
-                  child: ChatMessageList(
-                    chat: widget.chat,
-                    messages: messages,
-                    isLoading: isLoading,
-                    scrollController: _scrollController,
-                    onMessageLongPress: _setReplyToMessage,
-                    onMessageEdit: _editMessage,
-                    onMessageDelete: _deleteMessage,
-                    onMessageForward: _forwardMessage,
-                    onMessageOpenMedia: _openMedia,
-                    onReplyTap: _navigateToMessage,
-                    hasMoreMessages: hasMoreMessages,
-                    isLoadingMore: isLoadingMore,
-                    onLoadMore: () {
-                      context.read<MessagesBloc>().add(LoadMoreChatMessagesEvent(widget.chat.id));
-                    },
-                    searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
-                  ),
+                child: ChatMessageList(
+                  chat: widget.chat,
+                  messages: messages,
+                  isLoading: isLoading,
+                  scrollController: _scrollController,
+                  onMessageLongPress: _setReplyToMessage,
+                  onMessageEdit: _editMessage,
+                  onMessageDelete: _deleteMessage,
+                  onMessageForward: _forwardMessage,
+                  onMessageOpenMedia: _openMedia,
+                  onReplyTap: _navigateToMessage,
+                  hasMoreMessages: hasMoreMessages,
+                  isLoadingMore: isLoadingMore,
+                  onLoadMore: () {
+                    context.read<MessagesBloc>().add(LoadMoreChatMessagesEvent(widget.chat.id));
+                  },
+                  searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
                 ),
               ),
               // Custom header - overlay поверх контента
@@ -748,6 +755,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ],
           ),
+            ),
           ),
         );
         },

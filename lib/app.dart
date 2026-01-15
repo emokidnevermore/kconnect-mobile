@@ -20,6 +20,7 @@ import 'features/feed/presentation/blocs/feed_bloc.dart';
 import 'features/notifications/presentation/bloc/notifications_bloc.dart';
 import 'features/notifications/domain/notifications_repository.dart';
 import 'services/media_player_service.dart';
+import 'services/storage_service.dart';
 
 /// Главный виджет приложения K-Connect
 ///
@@ -36,6 +37,10 @@ class _KConnectAppState extends State<KConnectApp> {
   @override
   void initState() {
     super.initState();
+    StorageService.initializeUseLightTheme();
+    StorageService.initializeTabBarGlassMode();
+    StorageService.initializeAppBackgroundBlur();
+    StorageService.initializeAppBackgroundDarkening();
   }
 
   @override
@@ -80,48 +85,62 @@ class _KConnectAppState extends State<KConnectApp> {
 
             return BlocProvider.value(
               value: locator<ThemeBloc>(),
-              child: BlocBuilder<ThemeBloc, ThemeState>(
-                builder: (context, themeState) {
-              final colorScheme = themeState is ThemeLoaded
-                  ? themeState.colorScheme
-                  : ColorScheme.fromSeed(
-                      seedColor: const Color(0xFFD0BCFF),
-                      brightness: Brightness.dark,
-                    );
+              child: ValueListenableBuilder<bool>(
+                valueListenable: StorageService.useLightThemeNotifier,
+                builder: (context, useLightTheme, child) {
+                  return BlocBuilder<ThemeBloc, ThemeState>(
+                    builder: (context, themeState) {
+                  final colorScheme = themeState is ThemeLoaded
+                      ? themeState.colorScheme.copyWith(brightness: useLightTheme ? Brightness.light : Brightness.dark)
+                      : ColorScheme.fromSeed(
+                          seedColor: const Color(0xFFD0BCFF),
+                          brightness: useLightTheme ? Brightness.light : Brightness.dark,
+                        );
 
-              return DefaultTextStyle(
-                style: const TextStyle(
-                  fontFamily: 'Poppins',
-                  color: Color(0xFFEAEAEA),
-                ),
-                child: BackGestureWidthTheme(
-                  backGestureWidth: BackGestureWidth.fraction(1),
-                  child: MaterialApp(
-                    title: 'K-Connect',
-                    debugShowCheckedModeBanner: false,
-                    navigatorKey: AppRouter.navigatorKey,
-                    theme: AppTheme.materialDarkTheme(colorScheme).copyWith(
-                      pageTransitionsTheme: const PageTransitionsTheme(
-                        builders: {
-                          TargetPlatform.android: CupertinoPageTransitionsBuilderCustomBackGestureWidth(),
-                          TargetPlatform.iOS: CupertinoPageTransitionsBuilderCustomBackGestureWidth(),
-                        },
+                  return DefaultTextStyle(
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      color: useLightTheme ? const Color(0xFF1C1C1C) : const Color(0xFFEAEAEA),
+                    ),
+                    child: BackGestureWidthTheme(
+                      backGestureWidth: BackGestureWidth.fraction(1),
+                      child: MaterialApp(
+                        title: 'K-Connect',
+                        debugShowCheckedModeBanner: false,
+                        navigatorKey: AppRouter.navigatorKey,
+                        theme: useLightTheme
+                            ? AppTheme.materialLightTheme(colorScheme).copyWith(
+                          pageTransitionsTheme: const PageTransitionsTheme(
+                            builders: {
+                              TargetPlatform.android: CupertinoPageTransitionsBuilderCustomBackGestureWidth(),
+                              TargetPlatform.iOS: CupertinoPageTransitionsBuilderCustomBackGestureWidth(),
+                            },
+                          ),
+                        )
+                            : AppTheme.materialDarkTheme(colorScheme).copyWith(
+                          pageTransitionsTheme: const PageTransitionsTheme(
+                            builders: {
+                              TargetPlatform.android: CupertinoPageTransitionsBuilderCustomBackGestureWidth(),
+                              TargetPlatform.iOS: CupertinoPageTransitionsBuilderCustomBackGestureWidth(),
+                            },
+                          ),
+                        ),
+                        home: const SplashScreen(),
+                        onGenerateRoute: AppRouter.generateRoute,
+                        localizationsDelegates: const [
+                          GlobalCupertinoLocalizations.delegate,
+                          GlobalMaterialLocalizations.delegate,
+                          GlobalWidgetsLocalizations.delegate,
+                        ],
+                        supportedLocales: const [
+                          Locale('en', 'US'),
+                          Locale('ru', 'RU'),
+                        ],
                       ),
                     ),
-                    home: const SplashScreen(),
-                    onGenerateRoute: AppRouter.generateRoute,
-                    localizationsDelegates: const [
-                      GlobalCupertinoLocalizations.delegate,
-                      GlobalMaterialLocalizations.delegate,
-                      GlobalWidgetsLocalizations.delegate,
-                    ],
-                    supportedLocales: const [
-                      Locale('en', 'US'),
-                      Locale('ru', 'RU'),
-                    ],
-                  ),
-                ),
-              );
+                  );
+                    },
+                  );
                 },
               ),
             );

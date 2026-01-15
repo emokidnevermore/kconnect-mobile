@@ -15,6 +15,7 @@ import '../../../core/utils/image_utils.dart';
 import '../../../core/utils/theme_extensions.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../services/storage_service.dart';
+import '../../../core/widgets/app_background.dart';
 import '../domain/models/track.dart';
 import '../domain/models/album.dart';
 import '../domain/models/artist_detail.dart';
@@ -38,10 +39,13 @@ class ArtistScreen extends StatefulWidget {
   State<ArtistScreen> createState() => _ArtistScreenState();
 }
 
-class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMixin {
-  final ScrollController _scrollController = ScrollController();
+class _ArtistScreenState extends State<ArtistScreen>
+    with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  late Animation<double> _slideUpAnimation;
+
+  final ScrollController _scrollController = ScrollController();
   late AnimationController _bioAnimationController;
   late Animation<double> _bioFadeAnimation;
   late Animation<Offset> _bioSlideAnimation;
@@ -50,16 +54,26 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
   @override
   void initState() {
     super.initState();
+
     _scrollController.addListener(_onScroll);
-    
+
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 600),
     );
-    
-    _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _slideUpAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
+      ),
     );
 
     _bioAnimationController = AnimationController(
@@ -80,12 +94,13 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
       curve: Curves.easeOut,
     ));
 
-    // Загрузка данных артиста
+    // Start animation and load data
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _animationController.forward();
+      // Загрузка данных артиста
       if (mounted) {
         context.read<MusicBloc>().add(MusicArtistDetailsFetched(widget.artistId));
         context.read<MusicBloc>().add(MusicArtistAlbumsFetched(widget.artistId));
-        _animationController.forward();
       }
     });
   }
@@ -114,12 +129,12 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
   Widget build(BuildContext context) {
     return BlocBuilder<MusicBloc, MusicState>(
       builder: (context, state) {
-        if (state.artistDetailsStatus == MusicLoadStatus.loading && 
+        if (state.artistDetailsStatus == MusicLoadStatus.loading &&
             state.currentArtist == null) {
           return _buildLoadingState();
         }
 
-        if (state.artistDetailsStatus == MusicLoadStatus.failure && 
+        if (state.artistDetailsStatus == MusicLoadStatus.failure &&
             state.currentArtist == null) {
           return _buildErrorState();
         }
@@ -195,8 +210,8 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
               ),
               const SizedBox(height: 16),
               Text(
-                'Ошибка загрузки',
-                style: AppTextStyles.h3,
+                'Популярные',
+                style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface),
               ),
               const SizedBox(height: 8),
               TextButton(
@@ -221,7 +236,7 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
         child: Center(
           child: Text(
             'Артист не найден',
-            style: AppTextStyles.h3,
+            style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface),
           ),
         ),
       ),
@@ -233,89 +248,163 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
     final hasBackground = StorageService.appBackgroundPathNotifier.value != null &&
         StorageService.appBackgroundPathNotifier.value!.isNotEmpty;
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      extendBodyBehindAppBar: true,
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: CustomScrollView(
-          controller: _scrollController,
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            // Hero header с параллакс эффектом
-            SliverAppBar(
-              expandedHeight: 350,
-              pinned: true,
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              surfaceTintColor: Colors.transparent,
-              shadowColor: Colors.transparent,
-              scrolledUnderElevation: 0,
-              leading: const SizedBox.shrink(),
-              flexibleSpace: FlexibleSpaceBar(
-                titlePadding: EdgeInsets.zero,
-                centerTitle: false,
-                background: _buildHeroHeader(imageUrl, artist, hasBackground),
-              ),
-            ),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // AppBackground as bottom layer
+        AppBackground(fallbackColor: Theme.of(context).colorScheme.surface),
 
-            // Контент
-            SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Жанры
-                  if (artist.genres.isNotEmpty)
-                    _buildGenresSection(artist.genres, hasBackground),
+        // Main content
+        AnimatedBuilder(
+          animation: _animationController,
+          builder: (context, child) => Opacity(
+            opacity: _fadeAnimation.value,
+            child: Transform.translate(
+              offset: Offset(0, _slideUpAnimation.value),
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  // Hero header с параллакс эффектом (теперь как обычный sliver)
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 350,
+                      child: _buildHeroHeader(imageUrl, artist, hasBackground),
+                    ),
+                  ),
 
-                  // Биография (показывается над альбомами при нажатии на кнопку инфо)
-                  if (artist.bio.isNotEmpty)
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      child: _showBio
-                          ? FadeTransition(
-                              opacity: _bioFadeAnimation,
-                              child: SlideTransition(
-                                position: _bioSlideAnimation,
-                                child: _buildBioSection(artist.bio, hasBackground),
-                              ),
-                            )
-                          : const SizedBox.shrink(),
+                  // Контент
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Жанры
+                        if (artist.genres.isNotEmpty)
+                          _buildGenresSection(artist.genres, hasBackground),
+
+                        // Биография (показывается над альбомами при нажатии на кнопку инфо)
+                        if (artist.bio.isNotEmpty)
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                            child: _showBio
+                                ? FadeTransition(
+                                    opacity: _bioFadeAnimation,
+                                    child: SlideTransition(
+                                      position: _bioSlideAnimation,
+                                      child: _buildBioSection(artist.bio, hasBackground),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+
+                        // Альбомы
+                        _buildAlbumsSection(state.artistAlbums, hasBackground),
+
+                        // Популярные треки
+                        _buildPopularTracksSection(state.artistPopularTracks, state),
+
+                        // Заголовок треков
+                        _buildTracksHeader(artist.tracksCount, hasBackground),
+
+                        // Список треков
+                        _buildTracksList(artist.tracks, state, hasBackground),
+                      ],
+                    ),
+                  ),
+
+                  // Индикатор загрузки следующей страницы
+                  if (state.artistDetailsStatus == MusicLoadStatus.loading &&
+                      artist.tracks.isNotEmpty)
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
                     ),
 
-                  // Альбомы
-                  _buildAlbumsSection(state.artistAlbums, hasBackground),
-
-                  // Популярные треки
-                  _buildPopularTracksSection(state.artistPopularTracks, state),
-
-                  // Заголовок треков
-                  _buildTracksHeader(artist.tracksCount, hasBackground),
-
-                  // Список треков
-                  _buildTracksList(artist.tracks, state, hasBackground),
+                  // Отступ снизу
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: 100),
+                  ),
                 ],
               ),
             ),
+          ),
+        ),
 
-            // Индикатор загрузки следующей страницы
-            if (state.artistDetailsStatus == MusicLoadStatus.loading &&
-                artist.tracks.isNotEmpty)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Center(child: CircularProgressIndicator()),
+        // Header positioned above content
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: SafeArea(
+            bottom: false,
+            child: AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) => Opacity(
+                opacity: _fadeAnimation.value,
+                child: Transform.translate(
+                  offset: Offset(0, _slideUpAnimation.value),
+                  child: Container(
+                    height: 56,
+                    padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 8),
+                    child: Row(
+                      children: [
+                        ValueListenableBuilder<String?>(
+                          valueListenable: StorageService.appBackgroundPathNotifier,
+                          builder: (context, backgroundPath, child) {
+                            final hasBackground = backgroundPath != null && backgroundPath.isNotEmpty;
+                            final cardColor = hasBackground
+                                ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.7)
+                                : Theme.of(context).colorScheme.surfaceContainerLow;
+
+                            return Card(
+                              margin: EdgeInsets.zero,
+                              color: cardColor,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () => Navigator.of(context).pop(),
+                                      icon: Icon(
+                                        Icons.arrow_back,
+                                        color: Theme.of(context).colorScheme.onSurface,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        artist.name,
+                                        style: AppTextStyles.postAuthor.copyWith(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Theme.of(context).colorScheme.onSurface,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-
-            // Отступ снизу
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 100),
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -330,6 +419,10 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
             child: CachedNetworkImage(
               imageUrl: imageUrl,
               fit: BoxFit.cover,
+              memCacheWidth: 800,
+              memCacheHeight: 800,
+              maxWidthDiskCache: 1600,
+              maxHeightDiskCache: 1600,
               placeholder: (context, url) => Container(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: const Center(child: CircularProgressIndicator()),
@@ -382,7 +475,7 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
               children: [
                 Row(
                   children: [
-                    Expanded(
+                    Flexible(
                       child: Text(
                         artist.name,
                         style: AppTextStyles.h1.copyWith(
@@ -424,7 +517,7 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     if (artist.tracksCount > 0)
-                      Expanded(
+                      Flexible(
                         child: Text(
                           '${artist.tracksCount} ${_getTracksWord(artist.tracksCount)}',
                           style: AppTextStyles.bodyMedium.copyWith(
@@ -577,7 +670,7 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
             children: [
               Text(
                 'О исполнителе',
-                style: AppTextStyles.h3,
+                style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface),
               ),
               const SizedBox(height: 12),
               Text(
@@ -609,7 +702,7 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
             children: [
               Text(
                 'Жанры',
-                style: AppTextStyles.h3,
+                style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface),
               ),
               const SizedBox(height: 12),
               Wrap(
@@ -647,7 +740,7 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
             children: [
               Text(
                 'Треки',
-                style: AppTextStyles.h3,
+                style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface),
               ),
               const Spacer(),
               Text(
@@ -777,7 +870,7 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
             padding: const EdgeInsets.only(left: 4, bottom: 12),
             child: Text(
               'Альбомы',
-              style: AppTextStyles.h3,
+              style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface),
             ),
           ),
           SizedBox(
@@ -1003,7 +1096,7 @@ class _ArtistScreenState extends State<ArtistScreen> with TickerProviderStateMix
             padding: const EdgeInsets.only(left: 4,bottom: 12),
             child: Text(
               'Популярные',
-              style: AppTextStyles.h3,
+              style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface),
             ),
           ),
           SizedBox(

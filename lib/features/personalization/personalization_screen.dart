@@ -27,11 +27,14 @@ import '../../routes/app_router.dart';
 import '../../routes/route_names.dart';
 import '../../features/profile/components/swipe_pop_container.dart';
 import '../../shared/widgets/media_picker_modal.dart';
+import '../../shared/widgets/saving_overlay.dart';
 import '../../core/widgets/app_background.dart';
 import 'widgets/accent_color_card.dart';
+import 'widgets/theme_mode_card.dart';
 import 'widgets/tab_bar_style_card.dart';
 import 'widgets/hide_tab_bar_card.dart';
 import 'widgets/player_tap_inversion_card.dart';
+import 'widgets/message_image_fit_card.dart';
 import 'widgets/tab_bar_preview.dart';
 import 'widgets/background_section.dart';
 import 'dart:io';
@@ -49,9 +52,11 @@ class PersonalizationScreen extends StatefulWidget {
 
 class _PersonalizationScreenState extends State<PersonalizationScreen> {
   bool _useProfileAccentColor = false;
+  bool _useLightTheme = false;
   TabBarGlassMode _tabBarGlassMode = TabBarGlassMode.glass;
   bool _hideTabBar = false;
   bool _invertPlayerTapBehavior = false;
+  BoxFit _messageImageFitMode = BoxFit.cover;
   String? _appBackgroundPath;
   String? _appBackgroundType;
   String? _appBackgroundName;
@@ -59,9 +64,10 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
   String? _appBackgroundThumbnailPath;
   double _appBackgroundBlur = 10.0;
   double _appBackgroundDarkening = 0.4;
-  
+
   // Начальные значения для отслеживания изменений
   bool _initialUseProfileAccentColor = false;
+  bool _initialUseLightTheme = false;
   TabBarGlassMode _initialTabBarGlassMode = TabBarGlassMode.glass;
   bool _initialHideTabBar = false;
   bool _initialInvertPlayerTapBehavior = false;
@@ -75,6 +81,10 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
   // Флаг для отслеживания, нужно ли применить цвет профиля после загрузки
   bool _pendingProfileColorApply = false;
 
+  // Состояние overlay сохранения
+  SavingOverlayState _overlayState = SavingOverlayState.saving;
+  bool _showOverlay = false;
+
   @override
   void initState() {
     super.initState();
@@ -83,9 +93,11 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
 
   Future<void> _loadCurrentSettings() async {
     _useProfileAccentColor = await StorageService.getUseProfileAccentColor();
+    _useLightTheme = await StorageService.getUseLightTheme();
     _tabBarGlassMode = await StorageService.getTabBarGlassMode();
     _hideTabBar = await StorageService.getHideTabBar();
     _invertPlayerTapBehavior = await StorageService.getInvertPlayerTapBehavior();
+    _messageImageFitMode = await StorageService.getMessageImageFitMode();
     _appBackgroundPath = await StorageService.getAppBackgroundPath();
     _appBackgroundType = await StorageService.getAppBackgroundType();
     _appBackgroundThumbnailPath = await StorageService.getAppBackgroundThumbnailPath();
@@ -96,6 +108,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     _appBackgroundDarkening = await StorageService.getAppBackgroundDarkening();
 
     _initialUseProfileAccentColor = _useProfileAccentColor;
+    _initialUseLightTheme = _useLightTheme;
     _initialTabBarGlassMode = _tabBarGlassMode;
     _initialHideTabBar = _hideTabBar;
     _initialInvertPlayerTapBehavior = _invertPlayerTapBehavior;
@@ -110,6 +123,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
 
   bool get _hasUnsavedChanges {
     return _useProfileAccentColor != _initialUseProfileAccentColor ||
+           _useLightTheme != _initialUseLightTheme ||
            _tabBarGlassMode != _initialTabBarGlassMode ||
            _hideTabBar != _initialHideTabBar ||
            _invertPlayerTapBehavior != _initialInvertPlayerTapBehavior ||
@@ -130,9 +144,11 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
     
     // Сохраняем все изменения
     await StorageService.setUseProfileAccentColor(_useProfileAccentColor);
+    await StorageService.setUseLightTheme(_useLightTheme);
     await StorageService.setTabBarGlassMode(_tabBarGlassMode);
     await StorageService.setHideTabBar(_hideTabBar);
     await StorageService.setInvertPlayerTapBehavior(_invertPlayerTapBehavior);
+    await StorageService.setMessageImageFitMode(_messageImageFitMode);
     await StorageService.setAppBackgroundPath(_appBackgroundPath);
     await StorageService.setAppBackgroundType(_appBackgroundType);
     await StorageService.setAppBackgroundMetadata(_appBackgroundName, _appBackgroundSize);
@@ -144,6 +160,7 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
 
     // Обновляем начальные значения перед применением изменений
     _initialUseProfileAccentColor = _useProfileAccentColor;
+    _initialUseLightTheme = _useLightTheme;
     _initialTabBarGlassMode = _tabBarGlassMode;
     _initialHideTabBar = _hideTabBar;
     _initialInvertPlayerTapBehavior = _invertPlayerTapBehavior;
@@ -224,6 +241,15 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                                 });
                               },
                             ),
+                            const SizedBox(height: 12),
+                            ThemeModeCard(
+                              useLightTheme: _useLightTheme,
+                              onChanged: (value) {
+                                setState(() {
+                                  _useLightTheme = value;
+                                });
+                              },
+                            ),
                             const SizedBox(height: 24),
                             Text(
                               'Стиль таб-бара и кнопок',
@@ -267,6 +293,22 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                               onChanged: (value) {
                                 setState(() {
                                   _invertPlayerTapBehavior = value;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
+                              'Сообщения',
+                              style: AppTextStyles.body.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            MessageImageFitCard(
+                              selectedFit: _messageImageFitMode,
+                              onChanged: (fit) {
+                                setState(() {
+                                  _messageImageFitMode = fit;
                                 });
                               },
                             ),
@@ -368,30 +410,43 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
                             onPressed: _hasUnsavedChanges ? () async {
-                              final accentColorChanged = _useProfileAccentColor != _initialUseProfileAccentColor;
                               final tabBarModeChanged = _tabBarGlassMode != _initialTabBarGlassMode;
                               final hideTabBarChanged = _hideTabBar != _initialHideTabBar;
-                              final onlyBackgroundChanged = !accentColorChanged && 
-                                                            !tabBarModeChanged && 
-                                                            !hideTabBarChanged &&
-                                                            (_appBackgroundPath != _initialAppBackgroundPath || 
-                                                             _appBackgroundType != _initialAppBackgroundType);
-                              
-                              await _applyChanges();
 
-                              // UpdateAccentColorEvent уже вызывает перезагрузку приложения,
-                              // но если изменения только в режиме таб-бара, нужно перезагрузить вручную
-                              // Фон обновляется автоматически через ValueNotifier, перезагрузка не нужна
-                              if (!mounted) return;
+                              setState(() {
+                                _overlayState = SavingOverlayState.saving;
+                                _showOverlay = true;
+                              });
 
-                              if (!accentColorChanged && !onlyBackgroundChanged) {
-                                AppRouter.navigatorKey.currentState?.pushNamedAndRemoveUntil(
-                                  RouteNames.splash,
-                                  (route) => false,
-                                );
-                              } else if (onlyBackgroundChanged) {
-                                // Если изменился только фон, просто закрываем экран
-                                Navigator.of(context).pop();
+                              try {
+                                await _applyChanges();
+
+                                // Все изменения теперь применяются динамически, перезагрузка не нужна
+                                if (!mounted) return;
+
+                                // Меняем на состояние успеха и даем время увидеть анимацию галочки
+                                setState(() {
+                                  _overlayState = SavingOverlayState.success;
+                                });
+
+                                await Future.delayed(const Duration(seconds: 2));
+
+                                // Для изменений таб-бара нужна перезагрузка, для всего остального - просто закрываем экран
+                                if (tabBarModeChanged || hideTabBarChanged) {
+                                  AppRouter.navigatorKey.currentState?.pushNamedAndRemoveUntil(
+                                    RouteNames.splash,
+                                    (route) => false,
+                                  );
+                                } else {
+                                  // Все остальные изменения (акцентный цвет, фон) обновляются динамически
+                                  Navigator.of(context).pop();
+                                }
+                              } finally {
+                                if (mounted) {
+                                  setState(() {
+                                    _showOverlay = false;
+                                  });
+                                }
                               }
                             } : null,
                             icon: Icon(
@@ -411,6 +466,10 @@ class _PersonalizationScreenState extends State<PersonalizationScreen> {
               ),
             ),
           ),
+
+          // Saving overlay
+          if (_showOverlay)
+            SavingOverlay(state: _overlayState),
         ],
       ),
     );

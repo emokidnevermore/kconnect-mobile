@@ -80,31 +80,45 @@ class _AppBackgroundState extends State<AppBackground> {
             }
           });
         }
-        
-        if (_backgroundPath == null || (_backgroundPath != null && !File(_backgroundPath!).existsSync())) {
-          if (widget.fallbackColor != null) {
-            return Container(color: widget.fallbackColor);
-          }
-          return const SizedBox.shrink();
-        }
 
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            // Фоновое изображение/видео
-            _buildBackgroundContent(),
-            // Затемняющий overlay
-            Container(
-              color: Colors.black.withValues(alpha: _darkeningOpacity),
-            ),
-            // Блюр эффект
-            BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: _blurSigma, sigmaY: _blurSigma),
-              child: Container(
-                color: Colors.transparent,
-              ),
-            ),
-          ],
+        return ValueListenableBuilder<double>(
+          valueListenable: StorageService.appBackgroundBlurNotifier,
+          builder: (context, blurValue, child) {
+            _blurSigma = blurValue;
+
+            return ValueListenableBuilder<double>(
+              valueListenable: StorageService.appBackgroundDarkeningNotifier,
+              builder: (context, darkeningValue, child) {
+                _darkeningOpacity = darkeningValue;
+
+                if (_backgroundPath == null || (_backgroundPath != null && !File(_backgroundPath!).existsSync())) {
+                  if (widget.fallbackColor != null) {
+                    return Container(color: widget.fallbackColor);
+                  }
+                  return const SizedBox.shrink();
+                }
+
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Фоновое изображение/видео
+                    _buildBackgroundContent(),
+                    // Затемняющий overlay
+                    Container(
+                      color: Colors.black.withValues(alpha: _darkeningOpacity),
+                    ),
+                    // Блюр эффект
+                    BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: _blurSigma, sigmaY: _blurSigma),
+                      child: Container(
+                        color: Colors.transparent,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
         );
       },
     );

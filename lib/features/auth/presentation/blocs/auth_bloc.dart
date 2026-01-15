@@ -41,6 +41,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc(this._checkAuthUseCase, this._logoutUseCase, this._loginUseCase, this._registerUseCase, this._registerProfileUseCase, this._accountRepository, this._profileRepository, this._dataClearService, this._dioClient, this._themeBloc) : super(AuthInitial()) {
     on<CheckAuthEvent>(_onCheckAuth);
     on<RefreshAuthEvent>(_onRefreshAuth);
+    on<UpdateUsernameEvent>(_onUpdateUsername);
     on<LogoutEvent>(_onLogout);
     on<LogoutAccountEvent>(_onLogoutAccount);
     on<LoginEvent>(_onLogin);
@@ -85,6 +86,21 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
     await _onCheckAuth(CheckAuthEvent(), emit);
     debugPrint('AuthBloc: _onRefreshAuth completed');
+  }
+
+  Future<void> _onUpdateUsername(UpdateUsernameEvent event, Emitter<AuthState> emit) async {
+    debugPrint('AuthBloc: _onUpdateUsername called with new username: ${event.newUsername}');
+    final currentState = state;
+    if (currentState is AuthAuthenticated) {
+      final updatedUser = AuthUser(
+        id: currentState.user.id,
+        username: event.newUsername,
+        email: currentState.user.email,
+        avatarUrl: currentState.user.avatarUrl,
+      );
+      emit(AuthAuthenticated(updatedUser));
+      debugPrint('AuthBloc: Username updated to ${event.newUsername}');
+    }
   }
 
   Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {

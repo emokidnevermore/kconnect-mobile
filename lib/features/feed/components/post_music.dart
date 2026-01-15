@@ -6,10 +6,11 @@ import '../../../core/utils/image_utils.dart';
 import '../../../core/widgets/profile_accent_color_provider.dart';
 import '../../../services/cache/audio_preload_service.dart';
 import '../../music/domain/models/track.dart';
-import '../../music/domain/repositories/audio_repository.dart';
 import '../../music/presentation/blocs/music_bloc.dart';
 import '../../music/presentation/blocs/music_event.dart';
-import '../../../injection.dart';
+import '../../music/presentation/blocs/queue_bloc.dart';
+import '../../music/presentation/blocs/queue_event.dart';
+import '../domain/models/post.dart';
 
 /// Утилита для форматирования длительности трека в формат MM:SS
 String _formatDuration(int seconds) {
@@ -26,10 +27,12 @@ String _formatDuration(int seconds) {
 /// Интегрируется с системой воспроизведения музыки и MusicBloc для лайков.
 class PostMusic extends StatelessWidget {
   final List<Track> tracks;
+  final Post post;
 
   const PostMusic({
     super.key,
     required this.tracks,
+    required this.post,
   });
 
   @override
@@ -42,7 +45,12 @@ class PostMusic extends StatelessWidget {
       margin: const EdgeInsets.only(top: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: tracks.map((track) => _TrackRow(key: ValueKey(track.id), track: track)).toList(),
+        children: tracks.map((track) => _TrackRow(
+          key: ValueKey(track.id),
+          track: track,
+          post: post,
+          allTracks: tracks,
+        )).toList(),
       ),
     );
   }
@@ -51,10 +59,14 @@ class PostMusic extends StatelessWidget {
 /// Виджет для отображения отдельного трека с анимацией лайка
 class _TrackRow extends StatefulWidget {
   final Track track;
+  final Post post;
+  final List<Track> allTracks;
 
   const _TrackRow({
     super.key,
     required this.track,
+    required this.post,
+    required this.allTracks,
   });
 
   @override
@@ -140,10 +152,22 @@ class _TrackRowState extends State<_TrackRow> with SingleTickerProviderStateMixi
   }
 
   void _playTrack(BuildContext context, Track track) {
-    final audioRepository = locator<AudioRepository>();
-    audioRepository.playTrack(track).catchError((e) {
-      debugPrint('PostMusic: Error playing track: $e');
-    });
+    // Находим индекс выбранного трека в списке всех треков поста
+    final startIndex = widget.allTracks.indexWhere((t) => t.id == track.id);
+    if (startIndex == -1) {
+      debugPrint('PostMusic: Track not found in post tracks');
+      return;
+    }
+
+    // Создаем очередь из всех треков поста
+    final queueContext = 'Post by ${widget.post.userName}';
+    context.read<QueueBloc>().add(
+      QueuePlayTracksRequested(
+        widget.allTracks,
+        queueContext,
+        startIndex: startIndex,
+      ),
+    );
   }
 
   void _onLikePressed(BuildContext context, Track track) {

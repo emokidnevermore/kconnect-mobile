@@ -65,6 +65,8 @@ class WrappedDioClient {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
         'User-Agent': _generateUserAgent(),
+        'Origin': 'https://k-connect.ru',
+        'Referer': 'https://k-connect.ru',
       },
       followRedirects: true,
       validateStatus: (status) => status != null && status < 500,

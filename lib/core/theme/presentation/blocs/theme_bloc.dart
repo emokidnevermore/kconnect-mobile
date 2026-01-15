@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../services/storage_service.dart';
 import '../../../../theme/app_colors.dart';
-import '../../../../routes/app_router.dart';
-import '../../../../routes/route_names.dart';
 import 'theme_event.dart';
 import 'theme_state.dart';
 
@@ -19,90 +17,53 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     on<ResetThemeEvent>(_onResetTheme);
   }
 
-  static final Color _defaultSeedColor = const Color(0xFFD0BCFF);
+  static final Color _darkThemeSeedColor = const Color(0xFFD0BCFF);
+  static final Color _lightThemeSeedColor = const Color(0xFF7b5cff);
 
   /// Геттер для доступа к дефолтному seed цвету
-  static Color get defaultSeedColor => _defaultSeedColor;
+  static Color get defaultSeedColor => _darkThemeSeedColor;
 
   /// Создает ColorScheme из hex строки цвета используя seed цвет
-  /// 
-  /// Обрабатывает особый случай белых/очень светлых цветов, для которых
-  /// стандартная генерация ColorScheme.fromSeed может давать нежелательные зеленоватые оттенки.
-  /// Для таких цветов создается полностью монохромная (черно-белая) тема.
-  ColorScheme _createColorSchemeFromSeed(String hexColor) {
+  ///
+  /// Генерирует полную цветовую схему из seed цвета, но заменяет primary цвет
+  /// на исходный акцентный цвет профиля, чтобы сохранить именно тот цвет,
+  /// который выбрал пользователь.
+  ColorScheme _createColorSchemeFromSeed(String hexColor, Brightness brightness) {
     final hexColorSanitized = hexColor.replaceFirst('#', '');
     final colorInt = int.parse(hexColorSanitized, radix: 16);
     final seedColor = Color(colorInt | 0xFF000000);
-    
-    final luminance = seedColor.computeLuminance();
-    
-    // Если цвет очень светлый (почти белый), создаем полностью монохромную черно-белую схему
-    // чтобы избежать любых цветовых оттенков во всей палитре
-    if (luminance > 0.85) {
-      return _createMonochromeColorScheme(seedColor);
-    }
-    
-    // Для обычных цветов используем стандартную генерацию
-    return ColorScheme.fromSeed(
+
+    // Генерируем цветовую схему из seed цвета
+    final generatedScheme = ColorScheme.fromSeed(
       seedColor: seedColor,
-      brightness: Brightness.dark,
+      brightness: brightness,
+    );
+
+    // Заменяем primary цвет на исходный акцентный цвет профиля
+    return generatedScheme.copyWith(
+      primary: seedColor,
     );
   }
 
-  /// Создает полностью монохромную (черно-белую) ColorScheme для светлых цветов
-  ///
-  /// Все цвета используют только серые оттенки без какой-либо цветности,
-  /// что гарантирует отсутствие зеленоватых или других нежелательных оттенков.
-  ColorScheme _createMonochromeColorScheme(Color lightColor) {
-    return ColorScheme.dark(
-      primary: lightColor,
-      onPrimary: Colors.black,
-      primaryContainer: const Color(0xFF2C2C2C),
-      onPrimaryContainer: Colors.white,
-      secondary: const Color(0xFFB0B0B0),
-      onSecondary: Colors.black,
-      secondaryContainer: const Color(0xFF3A3A3A),
-      onSecondaryContainer: const Color(0xFFE0E0E0),
-      tertiary: const Color(0xFF909090),
-      onTertiary: Colors.black,
-      tertiaryContainer: const Color(0xFF3A3A3A),
-      onTertiaryContainer: const Color(0xFFE0E0E0),
-      error: const Color(0xFFCF6679),
-      onError: Colors.black,
-      errorContainer: const Color(0xFF4A2A2F),
-      onErrorContainer: const Color(0xFFF9DEDC),
-      surface: const Color(0xFF1C1C1C),
-      onSurface: Colors.white,
-      surfaceContainerLowest: const Color(0xFF0F0F0F),
-      surfaceContainerLow: const Color(0xFF282828),
-      surfaceContainer: const Color(0xFF2C2C2C),
-      surfaceContainerHigh: const Color(0xFF363636),
-      surfaceContainerHighest: const Color(0xFF414141),
-      outline: const Color(0xFF6C6C6C),
-      outlineVariant: const Color(0xFF444444),
-      shadow: Colors.black,
-      scrim: Colors.black,
-      inverseSurface: const Color(0xFFE0E0E0),
-      onInverseSurface: Colors.black,
-      inversePrimary: Colors.black,
-    );
-  }
+
 
   /// Создает дефолтную ColorScheme с точными брендовыми цветами
-  /// 
-  /// Использует точные брендовые цвета (#D0BCFF) вместо сгенерированных из seed
+  ///
+  /// Использует точные брендовые цвета (#D0BCFF для темной, #C8BCF6 для светлой) вместо сгенерированных из seed
   /// для сохранения брендовой идентичности
-  ColorScheme _createDefaultColorScheme() {
+  ColorScheme _createDefaultColorScheme(Brightness brightness) {
+    final seedColor = brightness == Brightness.light ? _lightThemeSeedColor : _darkThemeSeedColor;
+
     // Создаем базовую схему из seed для получения остальных цветов
     final baseScheme = ColorScheme.fromSeed(
-      seedColor: _defaultSeedColor,
-      brightness: Brightness.dark,
+      seedColor: seedColor,
+      brightness: brightness,
     );
-    
+
     // Переопределяем primary цвет точным брендовым цветом
     // Это гарантирует, что _isDefaultTheme() в AppColors правильно определит дефолтную тему
     return baseScheme.copyWith(
-      primary: _defaultSeedColor, // Точный брендовый цвет #D0BCFF
+      primary: seedColor,
     );
   }
 
@@ -111,7 +72,10 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       debugPrint('ThemeBloc: LoadThemeEvent started');
 
       final useProfileAccent = await StorageService.getUseProfileAccentColor();
+      final useLightTheme = await StorageService.getUseLightTheme();
+      final brightness = useLightTheme ? Brightness.light : Brightness.dark;
       debugPrint('ThemeBloc: Personalization enabled: $useProfileAccent');
+      debugPrint('ThemeBloc: Light theme enabled: $useLightTheme');
 
       String? accentColorHex;
 
@@ -122,14 +86,14 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
         debugPrint('ThemeBloc: Personalization disabled, using default color');
       }
 
-      ColorScheme colorScheme = _createDefaultColorScheme();
+      ColorScheme colorScheme = _createDefaultColorScheme(brightness);
       if (accentColorHex != null && accentColorHex.isNotEmpty) {
         try {
-          colorScheme = _createColorSchemeFromSeed(accentColorHex);
+          colorScheme = _createColorSchemeFromSeed(accentColorHex, brightness);
           debugPrint('ThemeBloc: Successfully created ColorScheme from $accentColorHex');
         } catch (e) {
           debugPrint('ThemeBloc: Failed to parse color $accentColorHex, using default');
-          colorScheme = _createDefaultColorScheme();
+          colorScheme = _createDefaultColorScheme(brightness);
         }
       } else {
         debugPrint('ThemeBloc: No accent color hex, using default color');
@@ -141,8 +105,9 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       emit(ThemeLoaded(colorScheme));
     } catch (e) {
       debugPrint('ThemeBloc: Error in LoadThemeEvent: $e');
-      AppColors.updateFromColorScheme(_createDefaultColorScheme());
-      emit(ThemeLoaded(_createDefaultColorScheme()));
+      final fallbackScheme = _createDefaultColorScheme(Brightness.dark);
+      AppColors.updateFromColorScheme(fallbackScheme);
+      emit(ThemeLoaded(fallbackScheme));
     }
   }
 
@@ -151,13 +116,16 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
       return;
     }
 
-    ColorScheme colorScheme = _createDefaultColorScheme();
+    final useLightTheme = await StorageService.getUseLightTheme();
+    final brightness = useLightTheme ? Brightness.light : Brightness.dark;
+
+    ColorScheme colorScheme = _createDefaultColorScheme(brightness);
     if (event.accentColor != null && event.accentColor!.isNotEmpty) {
       try {
-        colorScheme = _createColorSchemeFromSeed(event.accentColor!);
+        colorScheme = _createColorSchemeFromSeed(event.accentColor!, brightness);
         await StorageService.setSavedAccentColor(event.accentColor);
       } catch (e) {
-        colorScheme = _createDefaultColorScheme();
+        colorScheme = _createDefaultColorScheme(brightness);
         await StorageService.setSavedAccentColor(null);
       }
     } else {
@@ -168,20 +136,20 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
 
     emit(ThemeLoaded(colorScheme));
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      AppRouter.navigatorKey.currentState?.pushNamedAndRemoveUntil(
-          RouteNames.splash, (route) => false);
-    });
+    // Перезагрузка больше не нужна - все элементы обновляются динамически
   }
 
   void _onUpdateAccentColorState(UpdateAccentColorStateEvent event, Emitter<ThemeState> emit) async {
-    ColorScheme colorScheme = _createDefaultColorScheme();
+    final useLightTheme = await StorageService.getUseLightTheme();
+    final brightness = useLightTheme ? Brightness.light : Brightness.dark;
+
+    ColorScheme colorScheme = _createDefaultColorScheme(brightness);
     if (event.accentColor != null && event.accentColor!.isNotEmpty) {
       try {
-        colorScheme = _createColorSchemeFromSeed(event.accentColor!);
+        colorScheme = _createColorSchemeFromSeed(event.accentColor!, brightness);
         await StorageService.setSavedAccentColor(event.accentColor);
       } catch (e) {
-        colorScheme = _createDefaultColorScheme();
+        colorScheme = _createDefaultColorScheme(brightness);
         await StorageService.setSavedAccentColor(null);
       }
     } else {
@@ -196,8 +164,9 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   void _onResetTheme(ResetThemeEvent event, Emitter<ThemeState> emit) {
     StorageService.setUseProfileAccentColor(false);
     StorageService.setSavedAccentColor(null);
+    StorageService.setUseLightTheme(false);
 
-    final defaultColorScheme = _createDefaultColorScheme();
+    final defaultColorScheme = _createDefaultColorScheme(Brightness.dark);
     AppColors.updateFromColorScheme(defaultColorScheme);
 
     emit(ThemeLoaded(defaultColorScheme));

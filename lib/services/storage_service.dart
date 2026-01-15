@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../features/auth/domain/models/account.dart';
 import '../core/constants/tab_bar_glass_mode.dart';
@@ -14,6 +14,12 @@ class StorageService {
   
   // ValueNotifier для отслеживания изменений фона приложения
   static final ValueNotifier<String?> appBackgroundPathNotifier = ValueNotifier<String?>(null);
+
+  // ValueNotifier для отслеживания изменений размытия фона
+  static final ValueNotifier<double> appBackgroundBlurNotifier = ValueNotifier<double>(10.0);
+
+  // ValueNotifier для отслеживания изменений затемнения фона
+  static final ValueNotifier<double> appBackgroundDarkeningNotifier = ValueNotifier<double>(0.4);
 
   static Future<bool> hasActiveSession() async {
     final prefs = await _prefs;
@@ -177,9 +183,11 @@ class StorageService {
     final prefs = await _prefs;
     await prefs.remove('use_profile_accent_color');
     await prefs.remove('saved_accent_color');
+    await prefs.remove('use_light_theme');
     await prefs.remove('tab_bar_glass_mode');
     await prefs.remove('hide_tab_bar');
     await prefs.remove('invert_player_tap_behavior');
+    await prefs.remove('message_image_fit_mode');
     await prefs.remove('app_background_path');
     await prefs.remove('app_background_type');
     await prefs.remove('app_background_name');
@@ -189,9 +197,29 @@ class StorageService {
     await prefs.remove('app_background_darkening');
   }
 
+  static Future<bool> getUseLightTheme() async {
+    final prefs = await _prefs;
+    return prefs.getBool('use_light_theme') ?? false; // По умолчанию false (темная тема)
+  }
+
+  static Future<void> setUseLightTheme(bool useLight) async {
+    final prefs = await _prefs;
+    await prefs.setBool('use_light_theme', useLight);
+    useLightThemeNotifier.value = useLight;
+  }
+
+  // Инициализация ValueNotifier при старте приложения
+  static Future<void> initializeUseLightTheme() async {
+    final useLight = await getUseLightTheme();
+    useLightThemeNotifier.value = useLight;
+  }
+
   // ValueNotifier для отслеживания изменений режима таб-бара
-  static final ValueNotifier<TabBarGlassMode> tabBarGlassModeNotifier = 
+  static final ValueNotifier<TabBarGlassMode> tabBarGlassModeNotifier =
       ValueNotifier<TabBarGlassMode>(TabBarGlassMode.glass);
+
+  // ValueNotifier для отслеживания изменений режима темы
+  static final ValueNotifier<bool> useLightThemeNotifier = ValueNotifier<bool>(false);
 
   static Future<TabBarGlassMode> getTabBarGlassMode() async {
     final prefs = await _prefs;
@@ -212,6 +240,18 @@ class StorageService {
   static Future<void> initializeTabBarGlassMode() async {
     final mode = await getTabBarGlassMode();
     tabBarGlassModeNotifier.value = mode;
+  }
+
+  // Инициализация ValueNotifier для размытия фона при старте приложения
+  static Future<void> initializeAppBackgroundBlur() async {
+    final blur = await getAppBackgroundBlur();
+    appBackgroundBlurNotifier.value = blur;
+  }
+
+  // Инициализация ValueNotifier для затемнения фона при старте приложения
+  static Future<void> initializeAppBackgroundDarkening() async {
+    final darkening = await getAppBackgroundDarkening();
+    appBackgroundDarkeningNotifier.value = darkening;
   }
 
   static Future<bool> getHideTabBar() async {
@@ -302,6 +342,7 @@ class StorageService {
   static Future<void> setAppBackgroundBlur(double blur) async {
     final prefs = await _prefs;
     await prefs.setDouble('app_background_blur', blur);
+    appBackgroundBlurNotifier.value = blur;
   }
 
   static Future<double> getAppBackgroundDarkening() async {
@@ -312,6 +353,7 @@ class StorageService {
   static Future<void> setAppBackgroundDarkening(double darkening) async {
     final prefs = await _prefs;
     await prefs.setDouble('app_background_darkening', darkening);
+    appBackgroundDarkeningNotifier.value = darkening;
   }
 
   static Future<bool> getInvertPlayerTapBehavior() async {
@@ -322,6 +364,23 @@ class StorageService {
   static Future<void> setInvertPlayerTapBehavior(bool invert) async {
     final prefs = await _prefs;
     await prefs.setBool('invert_player_tap_behavior', invert);
+  }
+
+  static Future<BoxFit> getMessageImageFitMode() async {
+    final prefs = await _prefs;
+    final modeString = prefs.getString('message_image_fit_mode');
+    if (modeString == null) {
+      return BoxFit.cover; // По умолчанию cover
+    }
+    return BoxFit.values.firstWhere(
+      (fit) => fit.name == modeString,
+      orElse: () => BoxFit.cover,
+    );
+  }
+
+  static Future<void> setMessageImageFitMode(BoxFit fit) async {
+    final prefs = await _prefs;
+    await prefs.setString('message_image_fit_mode', fit.name);
   }
 
   static Future<List<String>> getMusicPlayedTracksHistory(String userId) async {

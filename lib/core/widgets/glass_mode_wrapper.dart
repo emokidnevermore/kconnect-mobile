@@ -94,31 +94,40 @@ class _GlassModeWrapperState extends State<GlassModeWrapper> {
   }
 
   Widget _buildSolidMode() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(widget.borderRadius),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-            spreadRadius: 0,
+    return ValueListenableBuilder<String?>(
+      valueListenable: StorageService.appBackgroundPathNotifier,
+      builder: (context, backgroundPath, child) {
+        final hasBackground = backgroundPath != null && backgroundPath.isNotEmpty;
+        final cardColor = hasBackground
+            ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.7)
+            : Theme.of(context).colorScheme.surfaceContainerLow;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(widget.borderRadius),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.08),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+                spreadRadius: 0,
+              ),
+              BoxShadow(
+                color: Colors.white.withValues(alpha: 0.05),
+                blurRadius: 1,
+                offset: const Offset(0, -1),
+                spreadRadius: 0,
+              ),
+            ],
           ),
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.05),
-            blurRadius: 1,
-            offset: const Offset(0, -1),
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: widget.child,
+          child: widget.child,
+        );
+      },
     );
   }
 }
-

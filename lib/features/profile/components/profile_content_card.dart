@@ -5,14 +5,12 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../services/api_client/dio_client.dart';
+import '../../../core/widgets/authorized_cached_network_image.dart';
 import '../domain/models/user_profile.dart';
 import '../domain/models/following_info.dart';
 import '../presentation/blocs/profile_state.dart';
 import 'profile_avatar_stats.dart';
-import 'profile_status_display.dart';
 import 'profile_social_links.dart';
 
 /// Виджет основной карточки контента профиля
@@ -130,6 +128,7 @@ class _ProfileContentCardState extends State<ProfileContentCard>
                             onUnfollowPressed: widget.onUnfollowPressed,
                             hideActionButton: true,
                             profileColorScheme: widget.profileColorScheme,
+                            hasProfileBackground: widget.hasProfileBackground,
                           ),
                       
                       // About section
@@ -142,20 +141,16 @@ class _ProfileContentCardState extends State<ProfileContentCard>
                           ),
                         ),
                       ],
-                      
-                      // Status
-                      if (widget.profile.statusText?.isNotEmpty ?? false) ...[
-                        const SizedBox(height: 16),
-                        ProfileStatusDisplay(statusText: widget.profile.statusText!),
-                      ],
-                      
+
                           // Social Links
-                          if (widget.profile.socials.isNotEmpty) ...[
+                          if (widget.profile.socials.isNotEmpty || (widget.profile.subscription != null && widget.profile.subscription!.active)) ...[
                             const SizedBox(height: 16),
                             ProfileSocialLinks(
                               socials: widget.profile.socials,
                               accentColor: widget.accentColor,
                               profileColorScheme: widget.profileColorScheme,
+                              hasProfileBackground: widget.hasProfileBackground,
+                              subscription: widget.profile.subscription,
                             ),
                           ],
                         ],
@@ -172,25 +167,26 @@ class _ProfileContentCardState extends State<ProfileContentCard>
   }
 
   Widget _buildBannerSection(BuildContext context) {
-    return FutureBuilder<Map<String, String>>(
-      future: DioClient().getImageAuthHeaders(),
-      builder: (context, snapshot) {
-        return Container(
-          height: 160,
-          decoration: BoxDecoration(
-            color: widget.accentColor.withValues(alpha: 0.3),
-            image: widget.profile.bannerUrl != null
-                ? DecorationImage(
-                    image: CachedNetworkImageProvider(
-                      widget.profile.bannerUrl!,
-                      headers: snapshot.data,
-                    ),
-                    fit: BoxFit.cover,
-                  )
-                : null,
-          ),
-        );
-      },
+    if (widget.profile.bannerUrl == null || widget.profile.bannerUrl!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return SizedBox(
+      height: 160,
+      width: double.infinity,
+      child: AuthorizedCachedNetworkImage(
+        imageUrl: widget.profile.bannerUrl!,
+        width: double.infinity,
+        height: 160,
+        fit: BoxFit.cover,
+        useOldImageOnUrlChange: false,
+        placeholder: (context, url) => Container(
+          color: widget.accentColor.withValues(alpha: 0.3),
+        ),
+        errorWidget: (context, url, error) => Container(
+          color: widget.accentColor.withValues(alpha: 0.3),
+        ),
+      ),
     );
   }
 }

@@ -56,89 +56,103 @@ class _MessagesScreenState extends State<MessagesScreen> with AutomaticKeepAlive
                 children: [
                   // Отступ сверху под хедер
                   const SizedBox(height: 44),
-                  // Search bar
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: ValueListenableBuilder<String?>(
-                      valueListenable: StorageService.appBackgroundPathNotifier,
-                      builder: (context, backgroundPath, child) {
-                        final hasBackground = backgroundPath != null && backgroundPath.isNotEmpty;
-                        final fillColor = hasBackground 
-                            ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.3)
-                            : Theme.of(context).colorScheme.surfaceContainerLow;
-                        
-                        return TextField(
-                          controller: _searchController,
-                          style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
-                          decoration: InputDecoration(
-                            hintText: 'Поиск чатов...',
-                            hintStyle: TextStyle(color: context.dynamicPrimaryColor.withValues(alpha: 0.8)),
-                            prefixIcon: Icon(Icons.search, color: context.dynamicPrimaryColor),
-                            filled: true,
-                            fillColor: fillColor,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
+                  // Chat list with search
+                  Expanded(
+                    child: state.status == MessagesStatus.loading && state.chats.isEmpty
+                        ? Center(
+                            child: CircularProgressIndicator(
+                              color: context.dynamicPrimaryColor,
                             ),
-                          ),
-                          onChanged: (query) {
-                            context.read<MessagesBloc>().add(SearchChatsEvent(query));
-                          },
-                        );
-                      },
-                    ),
-                  ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: () async {
+                              context.read<MessagesBloc>().add(RefreshChatsEvent());
+                            },
+                            child: CustomScrollView(
+                              slivers: [
+                                // Search bar
+                                SliverToBoxAdapter(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: ValueListenableBuilder<String?>(
+                                      valueListenable: StorageService.appBackgroundPathNotifier,
+                                      builder: (context, backgroundPath, child) {
+                                        final hasBackground = backgroundPath != null && backgroundPath.isNotEmpty;
+                                        final fillColor = hasBackground
+                                            ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.3)
+                                            : Theme.of(context).colorScheme.surfaceContainerLow;
 
-                // Chat list
-                Expanded(
-                  child: state.status == MessagesStatus.loading && state.chats.isEmpty
-                      ? Center(
-                          child: CircularProgressIndicator(
-                            color: context.dynamicPrimaryColor,
-                          ),
-                        )
-                      : state.filteredChats.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.chat_bubble_outline,
-                                    size: 64,
-                                    color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.3),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    state.chats.isEmpty
-                                        ? 'Нет чатов'
-                                        : 'Чаты не найдены',
-                                    style: AppTextStyles.body.copyWith(
-                                      color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.7),
+                                        return TextField(
+                                          controller: _searchController,
+                                          style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
+                                          decoration: InputDecoration(
+                                            hintText: 'Поиск чатов...',
+                                            hintStyle: TextStyle(color: context.dynamicPrimaryColor.withValues(alpha: 0.8)),
+                                            prefixIcon: Icon(Icons.search, color: context.dynamicPrimaryColor),
+                                            filled: true,
+                                            fillColor: fillColor,
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                              borderSide: BorderSide.none,
+                                            ),
+                                          ),
+                                          onChanged: (query) {
+                                            context.read<MessagesBloc>().add(SearchChatsEvent(query));
+                                          },
+                                        );
+                                      },
                                     ),
                                   ),
-                                ],
-                              ),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: () async {
-                                context.read<MessagesBloc>().add(RefreshChatsEvent());
-                              },
-                              child: ListView.builder(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                itemCount: state.filteredChats.length,
-                                itemBuilder: (context, index) {
-                                  final chat = state.filteredChats[index];
-                                  return ChatTile(
-                                    key: ValueKey(chat.id),
-                                    chat: chat,
-                                  );
-                                },
-                              ),
+                                ),
+                                // Chat list
+                                state.filteredChats.isEmpty
+                                    ? SliverFillRemaining(
+                                        hasScrollBody: false,
+                                        child: Center(
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                Icons.chat_bubble_outline,
+                                                size: 64,
+                                                color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.3),
+                                              ),
+                                              const SizedBox(height: 16),
+                                              Text(
+                                                state.chats.isEmpty
+                                                    ? 'Нет чатов'
+                                                    : 'Чаты не найдены',
+                                                style: AppTextStyles.body.copyWith(
+                                                  color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.7),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                    : SliverList(
+                                        delegate: SliverChildBuilderDelegate(
+                                          (context, index) {
+                                            final chat = state.filteredChats[index];
+                                            return ChatTile(
+                                              key: ValueKey(chat.id),
+                                              chat: chat,
+                                            );
+                                          },
+                                          childCount: state.filteredChats.length,
+                                        ),
+                                      ),
+                                // Bottom padding for tab bar
+                                const SliverToBoxAdapter(
+                                  child: SizedBox(height: 80),
+                                ),
+                              ],
                             ),
-                ),
-              ],
+                          ),
+                  ),
+                ],
+              ),
             ),
-          ),
           ),
         );
       },

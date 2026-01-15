@@ -42,23 +42,29 @@ class _CacheManagementScreenState extends State<CacheManagementScreen> {
   }
 
   Future<void> _loadCacheSizes() async {
-    setState(() {
-      _isLoading = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     try {
       final sizes = await _cacheService.getCacheSizes();
       final total = await _cacheService.getTotalCacheSize();
 
-      setState(() {
-        _cacheSizes = sizes;
-        _totalSize = total;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _cacheSizes = sizes;
+          _totalSize = total;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -340,6 +346,3 @@ class _CacheManagementScreenState extends State<CacheManagementScreen> {
     );
   }
 }
-
-
-

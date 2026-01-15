@@ -53,7 +53,15 @@ class UpdateProfileAvatarEvent extends ProfileEvent {
   UpdateProfileAvatarEvent(this.avatarPath);
 }
 
+class UpdateProfileBannerEvent extends ProfileEvent {
+  final String bannerPath;
+
+  UpdateProfileBannerEvent(this.bannerPath);
+}
+
 class DeleteProfileAvatarEvent extends ProfileEvent {}
+
+class DeleteProfileBannerEvent extends ProfileEvent {}
 
 class AddSocialLinkEvent extends ProfileEvent {
   final String name;

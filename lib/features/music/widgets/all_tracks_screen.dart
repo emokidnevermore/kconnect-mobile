@@ -1,49 +1,77 @@
-/// Виджет секции всех треков
+/// Экран всех треков
 ///
-/// Отображает список всех доступных музыкальных треков с поддержкой
-/// бесконечной прокрутки, пагинации и воспроизведения.
-/// Включает состояния загрузки, ошибки и пустого списка.
+/// Полноэкранный интерфейс для просмотра всех доступных треков пользователя.
+/// Использует анимации аналогично полноэкранному редактированию профиля.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../core/widgets/staggered_list_item.dart';
-import '../../../../core/widgets/custom_refresh_indicator.dart';
-import '../../../core/utils/theme_extensions.dart';
-import '../../../theme/app_text_styles.dart';
-import '../../../services/cache/audio_preload_service.dart';
+import 'package:kconnect_mobile/theme/app_text_styles.dart';
+import 'package:kconnect_mobile/core/widgets/app_background.dart';
+import 'package:kconnect_mobile/services/storage_service.dart';
+import 'package:kconnect_mobile/core/utils/theme_extensions.dart';
+import 'package:kconnect_mobile/core/widgets/staggered_list_item.dart';
+import 'package:kconnect_mobile/core/widgets/custom_refresh_indicator.dart';
+import 'package:kconnect_mobile/services/cache/audio_preload_service.dart';
 import '../domain/models/track.dart';
 import '../presentation/blocs/queue_bloc.dart';
 import '../presentation/blocs/queue_event.dart';
 import '../presentation/blocs/music_bloc.dart';
 import '../presentation/blocs/music_event.dart';
 import '../presentation/blocs/music_state.dart';
-
 import 'track_list_item.dart';
 
-/// Виджет секции всех треков с бесконечной прокруткой
-class AllTracksSection extends StatefulWidget {
-  const AllTracksSection({super.key});
+/// Виджет полноэкранного просмотра всех треков
+///
+/// Анимируется аналогично ProfileEditScreen с fade и slide up эффектами.
+class AllTracksScreen extends StatefulWidget {
+  const AllTracksScreen({super.key});
 
   @override
-  State<AllTracksSection> createState() => _AllTracksSectionState();
+  State<AllTracksScreen> createState() => _AllTracksScreenState();
 }
 
-class _AllTracksSectionState extends State<AllTracksSection> {
+class _AllTracksScreenState extends State<AllTracksScreen>
+    with TickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _slideUpAnimation;
+
   final ScrollController _scrollController = ScrollController();
   bool _isLoadingMore = false;
   DateTime? _lastLoadMoreTime;
   final AudioPreloadService _preloadService = AudioPreloadService.instance;
   int _lastPreloadedEndIndex = -1;
 
-  /// Инициализация виджета
   @override
   void initState() {
     super.initState();
+
     _scrollController.addListener(_onScroll);
 
-    // Загрузка данных при открытии секции
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _slideUpAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    // Start animation
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _animationController.forward();
+      // Загрузка данных при открытии экрана
       if (mounted) {
         final musicBloc = context.read<MusicBloc>();
         if (musicBloc.state.allTracks.isEmpty && musicBloc.state.allTracksStatus == MusicLoadStatus.initial) {
@@ -59,6 +87,7 @@ class _AllTracksSectionState extends State<AllTracksSection> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -103,7 +132,7 @@ class _AllTracksSectionState extends State<AllTracksSection> {
   void _preloadVisibleTracks() {
     final musicBloc = context.read<MusicBloc>();
     final state = musicBloc.state;
-    
+
     if (state.allTracks.isEmpty) return;
 
     // Вычисляем видимые индексы на основе позиции прокрутки
@@ -111,13 +140,13 @@ class _AllTracksSectionState extends State<AllTracksSection> {
     const itemHeight = 80.0;
     final scrollOffset = _scrollController.position.pixels;
     final viewportHeight = _scrollController.position.viewportDimension;
-    
+
     final startIndex = (scrollOffset / itemHeight).floor();
     final endIndex = ((scrollOffset + viewportHeight) / itemHeight).ceil() + 3; // +3 для предзагрузки вперед
-    
+
     final clampedStart = startIndex.clamp(0, state.allTracks.length);
     final clampedEnd = endIndex.clamp(0, state.allTracks.length);
-    
+
     // Предзагружаем только если диапазон изменился
     if (clampedEnd > _lastPreloadedEndIndex) {
       _preloadService.preloadVisibleTracks(
@@ -127,16 +156,6 @@ class _AllTracksSectionState extends State<AllTracksSection> {
       );
       _lastPreloadedEndIndex = clampedEnd;
     }
-  }
-
-  /// Построение виджета с реакцией на изменения состояния
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<MusicBloc, MusicState>(
-      builder: (context, state) {
-        return _buildContent(state);
-      },
-    );
   }
 
   /// Построение содержимого в зависимости от состояния загрузки
@@ -275,5 +294,109 @@ class _AllTracksSectionState extends State<AllTracksSection> {
     } catch (e) {
       // Обработка ошибки без показа пользователю
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // AppBackground as bottom layer
+        AppBackground(fallbackColor: Theme.of(context).colorScheme.surface),
+
+        // Main content
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            children: [
+              // Content
+              SafeArea(
+                bottom: true,
+                child: AnimatedBuilder(
+                  animation: _animationController,
+                  builder: (context, child) => Opacity(
+                    opacity: _fadeAnimation.value,
+                    child: Transform.translate(
+                      offset: Offset(0, _slideUpAnimation.value),
+                      child: BlocBuilder<MusicBloc, MusicState>(
+                        builder: (context, state) => _buildContent(state),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Header positioned above content
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: AnimatedBuilder(
+                    animation: _animationController,
+                    builder: (context, child) => Opacity(
+                      opacity: _fadeAnimation.value,
+                      child: Transform.translate(
+                        offset: Offset(0, _slideUpAnimation.value),
+                        child: Container(
+                          height: 56,
+                          padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 8),
+                          child: Row(
+                            children: [
+                              ValueListenableBuilder<String?>(
+                                valueListenable: StorageService.appBackgroundPathNotifier,
+                                builder: (context, backgroundPath, child) {
+                                  final hasBackground = backgroundPath != null && backgroundPath.isNotEmpty;
+                                  final cardColor = hasBackground
+                                      ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.7)
+                                      : Theme.of(context).colorScheme.surfaceContainerLow;
+
+                                  return Card(
+                                    margin: EdgeInsets.zero,
+                                    color: cardColor,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            onPressed: () => Navigator.of(context).pop(),
+                                            icon: Icon(
+                                              Icons.arrow_back,
+                                              color: Theme.of(context).colorScheme.onSurface,
+                                              size: 20,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Все треки',
+                                            style: AppTextStyles.postAuthor.copyWith(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: Theme.of(context).colorScheme.onSurface,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }

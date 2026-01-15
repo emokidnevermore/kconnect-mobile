@@ -6,9 +6,8 @@ import 'package:kconnect_mobile/features/menu/menu_screen.dart';
 import 'package:kconnect_mobile/features/messages/messages_screen.dart';
 import 'package:kconnect_mobile/features/messages/presentation/blocs/messages_bloc.dart';
 import 'package:kconnect_mobile/features/messages/presentation/blocs/messages_event.dart';
-import 'package:kconnect_mobile/features/messages/presentation/blocs/messages_state.dart';
 import 'package:kconnect_mobile/features/profile/my_profile_screen.dart';
-import 'package:kconnect_mobile/core/utils/theme_extensions.dart';
+import 'package:kconnect_mobile/features/profile/widgets/profile_edit_screen.dart';
 import 'package:kconnect_mobile/core/widgets/app_header.dart';
 import 'package:kconnect_mobile/features/auth/presentation/blocs/auth_bloc.dart';
 import 'package:kconnect_mobile/features/auth/presentation/blocs/auth_event.dart';
@@ -30,19 +29,23 @@ import 'package:kconnect_mobile/features/music/presentation/blocs/queue_event.da
 import 'package:kconnect_mobile/core/theme/presentation/blocs/theme_bloc.dart';
 import 'package:kconnect_mobile/core/theme/presentation/blocs/theme_event.dart';
 import 'package:kconnect_mobile/services/storage_service.dart';
-import 'package:kconnect_mobile/features/music/widgets/mini_player.dart';
 import 'package:kconnect_mobile/features/music/widgets/full_screen_player.dart';
 import 'package:kconnect_mobile/features/music/widgets/full_screen_search.dart';
 import 'package:audio_service/audio_service.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:kconnect_mobile/services/audio_service_manager.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
-import 'package:kconnect_mobile/features/notifications/presentation/bloc/notifications_bloc.dart';
 import 'package:kconnect_mobile/core/widgets/glass_mode_wrapper.dart';
+import 'package:kconnect_mobile/features/notifications/presentation/bloc/notifications_bloc.dart';
 import 'package:kconnect_mobile/features/notifications/presentation/bloc/notifications_event.dart';
-import 'package:kconnect_mobile/features/notifications/presentation/widgets/notifications_section.dart';
-import 'package:kconnect_mobile/routes/route_names.dart';
+
+import 'package:kconnect_mobile/features/notifications/presentation/screens/notifications_screen.dart';
+
 import 'package:kconnect_mobile/core/widgets/app_background.dart';
+import 'package:kconnect_mobile/core/widgets/bottom_navigation_bar.dart';
+import 'package:kconnect_mobile/features/post_creation/presentation/screens/post_creation_screen.dart';
+import 'package:kconnect_mobile/features/post_creation/presentation/blocs/post_creation_bloc.dart';
+import 'package:kconnect_mobile/features/messages/presentation/screens/create_chat_screen.dart';
+import 'package:kconnect_mobile/injection.dart';
 
 class MainTabs extends StatefulWidget {
   const MainTabs({super.key});
@@ -56,14 +59,10 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
   final ValueNotifier<int> _currentIndexNotifier = ValueNotifier(2);
   final ValueNotifier<bool> isTabAnimating = ValueNotifier(false);
   late AnimationController _tabBarAnimationController;
-  late Animation<double> _tabBarOpacityAnimation;
-  late Animation<double> _tabBarBottomAnimation;
   late final ValueNotifier<bool> feedScrolledDown = ValueNotifier(false);
   late final ValueNotifier<bool> scrollToTopRequested = ValueNotifier(false);
   late final List<Widget> _pages;
   final ValueNotifier<MusicSection> _musicSectionController = ValueNotifier(MusicSection.home);
-  late final ValueNotifier<bool> _notificationsVisible;
-  bool _isNotificationsOpen = false;
   final ValueNotifier<bool> _isMiniPlayerExpanded = ValueNotifier(false);
 
 
@@ -75,13 +74,6 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
       duration: const Duration(milliseconds: 300), // Material 3 standard duration
     );
 
-    _tabBarOpacityAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _tabBarAnimationController, curve: Curves.easeOutCubic) // Material 3 emphasized easing
-    );
-    _tabBarBottomAnimation = Tween<double>(begin: 16.0, end: -50.0).animate(
-      CurvedAnimation(parent: _tabBarAnimationController, curve: Curves.easeOutCubic) // Material 3 emphasized easing
-    );
-    _notificationsVisible = ValueNotifier(false);
 
     _pages = [
 
@@ -118,7 +110,6 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
   @override
   void dispose() {
     _tabBarAnimationController.dispose();
-    _notificationsVisible.dispose();
     super.dispose();
   }
 
@@ -157,32 +148,11 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
     _musicSectionController.value = MusicSection.home;
   }
 
-
-
-
-  IconData _getDynamicIcon() {
-    switch (_currentIndexNotifier.value) {
-      case 0:
-        return Icons.add;
-      case 1:
-        return Icons.search;
-      case 2:
-        return feedScrolledDown.value ? Icons.arrow_upward : Icons.add;
-      case 3:
-        return Icons.edit;
-      case 4:
-        return Icons.person;
-      default:
-        return Icons.add;
-    }
-  }
-
   void _onDynamicButtonPressed() {
-    // TODO: Реализовать действия для каждой вкладки - добавить навигацию к соответствующим экранам
-    // Для каждой вкладки реализовать специфическое действие при нажатии на динамическую кнопку
     switch (_currentIndexNotifier.value) {
       case 0:
-        // Профиль: редактирование??
+        // Профиль: редактирование
+        _openProfileEditScreen();
         break;
       case 1:
         // Музыка: поиск +
@@ -194,12 +164,23 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
           scrollToTopRequested.value = true;
         } else {
           // Навигация к созданию поста
-          Navigator.of(context).pushNamed(RouteNames.createPost);
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => BlocProvider.value(
+                value: locator<PostCreationBloc>(),
+                child: const PostCreationScreen(),
+              ),
+            ),
+          );
         }
         break;
       case 3:
         // Сообщения: новый чат
-        Navigator.of(context).pushNamed(RouteNames.createChat);
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const CreateChatScreen(),
+          ),
+        );
         break;
       case 4:
         // Меню: мульти-аккаунт +
@@ -216,12 +197,28 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
     );
   }
 
+  void _openProfileEditScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const ProfileEditScreen(),
+      ),
+    );
+  }
+
   void _showAccountMenu() {
     showDialog(
       context: context,
       builder: (dialogContext) => Dialog(
         backgroundColor: Colors.transparent,
         child: const AccountMenu(),
+      ),
+    );
+  }
+
+  void _openFullScreenPlayer() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const FullScreenPlayer(),
       ),
     );
   }
@@ -236,22 +233,16 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
   }
 
   void _toggleNotifications([bool? visible]) {
-    final nextValue = visible ?? !_notificationsVisible.value;
-    setState(() {
-      _notificationsVisible.value = nextValue;
-      _isNotificationsOpen = nextValue;
-    });
-    if (nextValue) {
-      context.read<NotificationsBloc>().add(const NotificationsStarted());
-    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => BlocProvider.value(
+          value: this.context.read<NotificationsBloc>(),
+          child: const NotificationsScreen(),
+        ),
+      ),
+    );
   }
 
-  void _onNotificationClose() {
-    setState(() {
-      _notificationsVisible.value = false;
-      _isNotificationsOpen = false;
-    });
-  }
 
 
   @override
@@ -303,10 +294,6 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
           canPop: false,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) {
-              if (_isNotificationsOpen) {
-                _onNotificationClose();
-                return;
-              }
               if (_currentIndexNotifier.value == 1 && _musicSectionController.value != MusicSection.home) {
                 _musicSectionController.value = MusicSection.home;
               }
@@ -373,84 +360,40 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
                                   )
                                 : null,
                               onNotificationsTap: _toggleNotifications,
-                              isNotificationsOpen: _isNotificationsOpen,
-                              hideNotificationsBadge: _isNotificationsOpen,
                             ),
                           ),
                         ),
                       ),
                     ),
-                      // TabBar и другие элементы поверх контента
+                      // Унифицированная нижняя навигационная панель
                       ValueListenableBuilder<MusicSection>(
                         valueListenable: _musicSectionController,
                         builder: (context, section, child) {
-                          // Скрываем таббар и кнопку в секции артиста
+                          // Скрываем навигацию в секции артиста
                           if (section == MusicSection.artist) {
                             return _buildArtistPlayButton();
                           }
-                          
-                          return FutureBuilder<bool>(
-                            future: StorageService.getHideTabBar(),
-                            builder: (context, snapshot) {
-                              final hideTabBar = snapshot.data ?? false;
-                              if (hideTabBar) {
-                                return const SizedBox.shrink();
-                              }
-                              return AnimatedBuilder(
-                                animation: _tabBarAnimationController,
-                                builder: (context, child) => Positioned(
-                                  bottom: _tabBarBottomAnimation.value,
-                                  left: 0,
-                                  right: 0,
-                                  child: Opacity(
-                                    opacity: _tabBarOpacityAnimation.value,
-                                    child: _buildTabBar(),
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                      ValueListenableBuilder<MusicSection>(
-                        valueListenable: _musicSectionController,
-                        builder: (context, section, child) {
-                          // Скрываем динамическую кнопку в секции артиста
-                          if (section == MusicSection.artist) {
-                            return const SizedBox.shrink();
-                          }
-                          
-                          return AnimatedBuilder(
-                            animation: _tabBarAnimationController,
-                            builder: (context, child) => Positioned(
-                              bottom: _tabBarBottomAnimation.value,
-                              right: 12,
-                              child: Opacity(
-                                opacity: _tabBarOpacityAnimation.value,
-                                child: ValueListenableBuilder<int>(
-                                  valueListenable: _currentIndexNotifier,
-                                  builder: (context, currentIndex, child) => ValueListenableBuilder<bool>(
-                                    valueListenable: feedScrolledDown,
-                                    builder: (context, scrolledDown, child) => _buildDynamicButton(),
-                                  ),
-                                ),
-                              ),
+
+                          return Positioned(
+                            bottom: 16.0,
+                            left: 0,
+                            right: 0,
+                            child: AppBottomNavigationBar(
+                              onTabTapped: _onTabTapped,
+                              onDynamicButtonPressed: _onDynamicButtonPressed,
+                              onFeedScrollChanged: _onFeedScrollChanged,
+                              currentIndex: _currentIndexNotifier,
+                              feedScrolledDown: feedScrolledDown,
+                              scrollToTopRequested: () => scrollToTopRequested.value = true,
+                              onMusicTabTap: () => _onTabTapped(1),
+                              onTabBarToggle: _onTabBarToggle,
+                              onFullScreenTap: _openFullScreenPlayer,
+
                             ),
                           );
                         },
                       ),
-                      MiniPlayer(
-                        onMusicTabTap: () => _onTabTapped(1),
-                        onTabBarToggle: _onTabBarToggle,
-                        onFullScreenTap: _openFullScreenPlayer,
-                      ),
-                      ValueListenableBuilder<bool>(
-                        valueListenable: _notificationsVisible,
-                        builder: (context, visible, child) => NotificationsSection(
-                          isVisible: visible,
-                          onClose: _onNotificationClose,
-                        ),
-                      ),
+
                     ],
                   ),
                 ),
@@ -462,188 +405,7 @@ class _MainTabsState extends State<MainTabs> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget _buildTabBar() {
-    return Center(
-      child: SizedBox(
-        width: MediaQuery.of(context).size.width * 0.65, // 65% ширины
-        height: 50, // тонкая сигаретка
-        child: GlassModeWrapper(
-          borderRadius: 25,
-          settings: const LiquidGlassSettings(
-            thickness: 15,
-            glassColor: Color(0x33FFFFFF),
-            lightIntensity: 1.5,
-            chromaticAberration: 1,
-            saturation: 1.1,
-            ambientStrength: 1,
-            blur: 4,
-            refractiveIndex: 1.8,
-          ),
-          child: ValueListenableBuilder<int>(
-            valueListenable: _currentIndexNotifier,
-            builder: (context, currentIndex, child) => Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildTabIcon(0, Icons.person),
-                StreamBuilder<({bool hasTrack, bool playing, double progress})>(
-                  stream: () {
-                    final handler = AudioServiceManager.getHandler();
 
-                    // Используем handler напрямую для mediaItem, если доступен (более надежно)
-                    Stream<MediaItem?> mediaItemStream;
-                    if (handler != null) {
-                      final initialMediaItem = handler.mediaItem.valueOrNull;
-                      mediaItemStream = handler.mediaItem.startWith(initialMediaItem);
-                    } else {
-                      // Fallback when handler is not available - create a stream that emits null initially
-                      mediaItemStream = Stream.value(null);
-                    }
-
-                    // Используем handler напрямую для playing, если доступен (более надежно)
-                    Stream<bool> playingStream;
-                    if (handler != null) {
-                      final initialPlaying = handler.playbackState.valueOrNull?.playing ?? false;
-                      playingStream = handler.playbackState
-                          .map((state) => state.playing)
-                          .distinct()
-                          .startWith(initialPlaying);
-                    } else {
-                      // Fallback when handler is not available - create a stream that emits false initially
-                      playingStream = Stream.value(false);
-                    }
-                    
-                    return Rx.combineLatest3<MediaItem?, bool, Duration, ({bool hasTrack, bool playing, double progress})>(
-                      mediaItemStream,
-                      playingStream,
-                      AudioService.position.startWith(Duration.zero),
-                      (mediaItem, playing, position) {
-                        final duration = mediaItem?.duration;
-                        final progress = (duration != null && duration.inSeconds > 0)
-                            ? position.inSeconds / duration.inSeconds
-                            : 0.0;
-                        final hasTrack = mediaItem != null;
-                        return (hasTrack: hasTrack, playing: playing, progress: progress);
-                      },
-                    );
-                  }(),
-                  builder: (context, snapshot) {
-                    final data = snapshot.data ?? (hasTrack: false, playing: false, progress: 0.0);
-                    // Показываем кружок, если есть трек (независимо от playing)
-                    return _buildMusicTabIcon(data.hasTrack, data.progress, data.playing);
-                  },
-                ),
-                _buildTabIcon(2, Icons.newspaper),
-                _buildTabIcon(3, Icons.chat_bubble_outline),
-                _buildTabIcon(4, Icons.grid_view),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMusicTabIcon(bool hasTrack, double progress, bool isPlaying) {
-    final isSelected = _currentIndexNotifier.value == 1;
-    return IconButton(
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
-      onPressed: () => _onTabTapped(1),
-      icon: Icon(
-        Icons.music_note,
-        size: 24,
-        // Используем динамический цвет для активной вкладки, как у других табов
-        color: isSelected ? context.dynamicPrimaryColor : Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-    );
-  }
-
-  void _openFullScreenPlayer() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const FullScreenPlayer(),
-      ),
-    );
-  }
-
-  Widget _buildTabIcon(int index, IconData icon) {
-    final isSelected = _currentIndexNotifier.value == index;
-
-    if (index == 3) {
-      return BlocSelector<MessagesBloc, MessagesState, int>(
-        selector: (state) => state.totalUnreadCount,
-        builder: (context, unreadCount) {
-          debugPrint('MainTabs: Messages badge - unreadCount: $unreadCount');
-          return IconButton(
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            onPressed: () => _onTabTapped(index),
-            icon: Badge(
-              isLabelVisible: unreadCount > 0,
-              label: Text(
-                unreadCount > 99 ? '99+' : unreadCount.toString(),
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              backgroundColor: context.dynamicPrimaryColor,
-              textColor: Theme.of(context).colorScheme.onPrimary,
-              alignment: AlignmentDirectional.topEnd,
-              offset: const Offset(4, -4),
-              child: Icon(
-                icon,
-                size: 24,
-                color: isSelected ? context.dynamicPrimaryColor : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          );
-        },
-      );
-    }
-
-    return IconButton(
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
-      onPressed: () => _onTabTapped(index),
-      icon: Icon(
-        icon,
-        size: 24,
-        color: isSelected ? context.dynamicPrimaryColor : Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-    );
-  }
-
-  Widget _buildDynamicButton() {
-    return GlassModeWrapper(
-      borderRadius: 25,
-      settings: const LiquidGlassSettings(
-        thickness: 15,
-        glassColor: Color(0x33FFFFFF),
-        lightIntensity: 1.5,
-        chromaticAberration: 1,
-        saturation: 1.1,
-        ambientStrength: 1,
-        blur: 4,
-        refractiveIndex: 1.8,
-      ),
-      child: SizedBox(
-        width: 50,
-        height: 50,
-        child: IconButton(
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          onPressed: _onDynamicButtonPressed,
-          icon: Icon(
-            _getDynamicIcon(),
-            size: 24,
-            // Используем цвет неактивных кнопок таб-бара
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildArtistPlayButton() {
     final handler = AudioServiceManager.getHandler();

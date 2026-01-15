@@ -328,13 +328,15 @@ class MessageBubble extends StatelessWidget {
         },
         child: AuthorizedCachedNetworkImage(
           imageUrl: fullPhotoUrl,
-          width: MediaQuery.of(context).size.width * 0.6,
+          width: 256,
+          height: 256,
           fit: BoxFit.cover,
-          memCacheWidth: 500, // Optimize memory usage for large images
+          alignment: Alignment.center,
+          memCacheWidth: 500,
           memCacheHeight: 500,
           placeholder: (context, url) => Container(
-            width: MediaQuery.of(context).size.width * 0.6,
-            height: 200,
+            width: 256,
+            height: 256,
             color: context.dynamicPrimaryColor.withValues(alpha: 0.1),
             child: Center(
               child: CircularProgressIndicator(
@@ -343,8 +345,8 @@ class MessageBubble extends StatelessWidget {
             ),
           ),
           errorWidget: (context, url, error) => Container(
-            width: MediaQuery.of(context).size.width * 0.6,
-            height: 200,
+            width: 256,
+            height: 256,
             color: context.dynamicPrimaryColor.withValues(alpha: 0.1),
             child: Icon(
               Icons.broken_image,
@@ -471,14 +473,14 @@ class MessageBubble extends StatelessWidget {
         },
         child: AuthorizedCachedNetworkImage(
           imageUrl: stickerUrl,
-          width: 200,
-          height: 200,
-          fit: BoxFit.contain,
+          width: 256,
+          height: 256,
+          fit: BoxFit.cover,
           memCacheWidth: 256, // Stickers are usually 256x256 or 512x512
           memCacheHeight: 256,
           placeholder: (context, url) => Container(
-            width: 200,
-            height: 200,
+            width: 256,
+            height: 256,
             color: context.dynamicPrimaryColor.withValues(alpha: 0.1),
             child: Center(
               child: CircularProgressIndicator(
@@ -487,8 +489,8 @@ class MessageBubble extends StatelessWidget {
             ),
           ),
           errorWidget: (context, url, error) => Container(
-            width: 200,
-            height: 200,
+            width: 256,
+            height: 256,
             color: context.dynamicPrimaryColor.withValues(alpha: 0.1),
             child: Icon(
               Icons.tag_faces,

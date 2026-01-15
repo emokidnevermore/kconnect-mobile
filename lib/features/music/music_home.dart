@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../theme/app_text_styles.dart';
 import '../../core/utils/theme_extensions.dart';
-import '../../features/profile/components/swipe_pop_container.dart';
+import '../../core/theme/presentation/blocs/theme_bloc.dart';
+import '../../core/theme/presentation/blocs/theme_state.dart';
 import 'widgets/section_list.dart';
 import 'widgets/charts_section.dart';
 import 'widgets/vibe_animated_card.dart';
 import 'widgets/music_navigation_card.dart';
-import 'widgets/favorites_section.dart';
-import 'widgets/playlists_section.dart';
-import 'widgets/all_tracks_section.dart';
+import 'widgets/favorites_screen.dart';
+import 'widgets/playlists_screen.dart';
+import 'widgets/all_tracks_screen.dart';
 
 import 'widgets/artists_section.dart';
 import 'widgets/artist_screen.dart';
@@ -38,7 +39,6 @@ class MusicHome extends StatefulWidget {
 
 class _MusicHomeState extends State<MusicHome> with AutomaticKeepAliveClientMixin {
   MusicSection currentSection = MusicSection.home;
-  int? _currentArtistId;
 
   @override
   bool get wantKeepAlive => true;
@@ -75,15 +75,8 @@ class _MusicHomeState extends State<MusicHome> with AutomaticKeepAliveClientMixi
     switch (currentSection) {
       case MusicSection.home:
         return _buildHomeSection();
-      case MusicSection.favorites:
-        return _buildFavoritesSection();
-      case MusicSection.playlists:
-        return _buildPlaylistsSection();
-      case MusicSection.allTracks:
-        return _buildAllTracksSection();
-
-      case MusicSection.artist:
-        return _buildArtistSection();
+      default:
+        return _buildHomeSection();
     }
   }
 
@@ -115,17 +108,21 @@ class _MusicHomeState extends State<MusicHome> with AutomaticKeepAliveClientMixi
                   child: SizedBox(height: 4),
                 ),
                 SliverToBoxAdapter(
-                  child: MusicNavigationCardsRow(
-                    leftCard: MusicNavigationCard(
-                      title: 'Любимые',
-                      icon: Icons.favorite,
-                      onPressed: _onFavoritesTap,
-                    ),
-                    rightCard: MusicNavigationCard(
-                      title: 'Плейлисты',
-                      icon: Icons.album,
-                      onPressed: _onPlaylistsTap,
-                    ),
+                  child: BlocBuilder<ThemeBloc, ThemeState>(
+                    builder: (context, state) {
+                      return MusicNavigationCardsRow(
+                        leftCard: MusicNavigationCard(
+                          title: 'Любимые',
+                          icon: Icons.favorite,
+                          onPressed: _onFavoritesTap,
+                        ),
+                        rightCard: MusicNavigationCard(
+                          title: 'Плейлисты',
+                          icon: Icons.album,
+                          onPressed: _onPlaylistsTap,
+                        ),
+                      );
+                    },
                   ),
                 ),
                 // Равные вертикальные отступы между основными секциями
@@ -180,12 +177,16 @@ class _MusicHomeState extends State<MusicHome> with AutomaticKeepAliveClientMixi
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                    child: _buildRectangleCard(
-                      'Все треки',
-                      Icons.queue_music,
-                      () => _onAllTracksTap(),
-                      color: context.dynamicPrimaryColor,
-                      textPosition: TextAlign.left,
+                    child: BlocBuilder<ThemeBloc, ThemeState>(
+                      builder: (context, state) {
+                        return _buildRectangleCard(
+                          'Все треки',
+                          Icons.queue_music,
+                          () => _onAllTracksTap(),
+                          color: context.dynamicPrimaryColor,
+                          textPosition: TextAlign.left,
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -259,45 +260,15 @@ class _MusicHomeState extends State<MusicHome> with AutomaticKeepAliveClientMixi
     );
   }
 
-  Widget _buildFavoritesSection() {
-    return SwipePopContainer(
-      onPop: _goToHomeSection,
-      child: const FavoritesSection(),
-    );
-  }
-
-  Widget _buildPlaylistsSection() {
-    return SwipePopContainer(
-      onPop: _goToHomeSection,
-      child: const PlaylistsSection(),
-    );
-  }
-
-  Widget _buildAllTracksSection() {
-    return SwipePopContainer(
-      onPop: _goToHomeSection,
-      child: const AllTracksSection(),
-    );
-  }
 
 
 
-  Widget _buildArtistSection() {
-    final artistId = _currentArtistId;
-    if (artistId == null) {
-      return SwipePopContainer(
-        onPop: _goToHomeSection,
-        child: const Center(
-          child: Text('Артист не выбран'),
-        ),
-      );
-    }
 
-    return SwipePopContainer(
-      onPop: _goToHomeSection,
-      child: ArtistScreen(artistId: artistId),
-    );
-  }
+
+
+
+
+
 
 
 
@@ -361,25 +332,34 @@ class _MusicHomeState extends State<MusicHome> with AutomaticKeepAliveClientMixi
   }
 
   void _onFavoritesTap() {
-    setState(() => currentSection = MusicSection.favorites);
-    widget.sectionController?.value = MusicSection.favorites;
     final musicBloc = context.read<MusicBloc>();
     musicBloc.add(MusicFavoritesFetched());
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const FavoritesScreen(),
+      ),
+    );
   }
 
   void _onPlaylistsTap() {
-    setState(() => currentSection = MusicSection.playlists);
-    widget.sectionController?.value = MusicSection.playlists;
     final musicBloc = context.read<MusicBloc>();
     musicBloc.add(MusicMyPlaylistsFetched());
     musicBloc.add(MusicPublicPlaylistsFetched());
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const PlaylistsScreen(),
+      ),
+    );
   }
 
   void _onAllTracksTap() {
-    setState(() => currentSection = MusicSection.allTracks);
-    widget.sectionController?.value = MusicSection.allTracks;
     final musicBloc = context.read<MusicBloc>();
     musicBloc.add(MusicAllTracksPaginatedFetched());
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const AllTracksScreen(),
+      ),
+    );
   }
 
   void _onTrackPlay(Track track, {String? queueContext, List<Track>? allTracks}) {
@@ -411,20 +391,15 @@ class _MusicHomeState extends State<MusicHome> with AutomaticKeepAliveClientMixi
   }
 
   void _onArtistTap(Artist artist) {
-    setState(() {
-      _currentArtistId = artist.id;
-      currentSection = MusicSection.artist;
-    });
-    widget.sectionController?.value = MusicSection.artist;
     final musicBloc = context.read<MusicBloc>();
     musicBloc.add(MusicArtistDetailsFetched(artist.id));
+    musicBloc.add(MusicArtistAlbumsFetched(artist.id));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ArtistScreen(artistId: artist.id),
+      ),
+    );
   }
 
-  void _goToHomeSection() {
-    setState(() {
-      currentSection = MusicSection.home;
-      _currentArtistId = null;
-    });
-    widget.sectionController?.value = MusicSection.home;
-  }
+
 }

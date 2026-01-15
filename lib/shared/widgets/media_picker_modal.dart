@@ -553,12 +553,13 @@ class _MediaPickerModalState extends State<MediaPickerModal>
 
 
   void _toggleTrackSelection(Track track) {
-
     setState(() {
       if (_selectedTracks.contains(track)) {
         _selectedTracks.remove(track);
       } else {
-        _selectedTracks.add(track);
+        if (_selectedTracks.length < 3) {
+          _selectedTracks.add(track);
+        }
       }
     });
   }
@@ -866,7 +867,7 @@ class _MediaPickerModalState extends State<MediaPickerModal>
             child: Text('Закрыть', style: AppTextStyles.bodyMedium.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ),
           const Spacer(),
-          // В режиме photoOnly показываем выбор альбома, иначе "Добавить контент"
+          // В режиме photoOnly показываем выбор альбома
           widget.photoOnly
               ? TextButton(
                   onPressed: _showAlbumSelector,
@@ -886,7 +887,7 @@ class _MediaPickerModalState extends State<MediaPickerModal>
                     ],
                   ),
                 )
-              : Text('Добавить контент', style: AppTextStyles.h3.copyWith(color: Theme.of(context).colorScheme.onSurface)),
+              : const SizedBox.shrink(),
           const Spacer(),
           TextButton(
             onPressed: _hasContent ? _confirmSelection : null,
@@ -1161,10 +1162,20 @@ class _MediaPickerModalState extends State<MediaPickerModal>
               borderRadius: BorderRadius.circular(8),
               border: isSelected ? Border.all(color: context.dynamicPrimaryColor.withValues(alpha: 0.3), width: 1) : null,
             ),
-            child: TrackListItem(
-              track: track,
-              onTap: () => _toggleTrackSelection(track),
-              showLikeButton: false,
+            child: Stack(
+              children: [
+                TrackListItem(
+                  track: track,
+                  onTap: () => _toggleTrackSelection(track),
+                  showLikeButton: false,
+                ),
+                if (!isSelected && _selectedTracks.length >= 3)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.3),
+                    ),
+                  ),
+              ],
             ),
           );
         },
@@ -1221,10 +1232,20 @@ class _MediaPickerModalState extends State<MediaPickerModal>
             borderRadius: BorderRadius.circular(8),
             border: isSelected ? Border.all(color: context.dynamicPrimaryColor.withValues(alpha: 0.3), width: 1) : null,
           ),
-          child: TrackListItem(
-            track: track,
-            onTap: () => _toggleTrackSelection(track),
-            showLikeButton: false,
+          child: Stack(
+            children: [
+              TrackListItem(
+                track: track,
+                onTap: () => _toggleTrackSelection(track),
+                showLikeButton: false,
+              ),
+              if (!isSelected && _selectedTracks.length >= 3)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.3),
+                  ),
+                ),
+            ],
           ),
         );
       },

@@ -7,11 +7,10 @@ library;
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../theme/app_colors.dart';
-import '../../../services/api_client/dio_client.dart';
+import '../../../core/widgets/authorized_cached_network_image.dart';
 import '../domain/models/user_profile.dart';
 
 /// Виджет заголовка профиля с баннером и информацией
@@ -58,25 +57,26 @@ class ProfileHeader extends StatelessWidget {
   }
 
   Widget _buildBannerBackground(BuildContext context) {
-    return FutureBuilder<Map<String, String>>(
-      future: DioClient().getImageAuthHeaders(),
-      builder: (context, snapshot) {
-        return Container(
-          height: double.infinity,
-          decoration: BoxDecoration(
-            color: accentColor.withValues(alpha:0.3),
-            image: profile.bannerUrl != null
-                ? DecorationImage(
-                    image: CachedNetworkImageProvider(
-                      profile.bannerUrl!,
-                      headers: snapshot.data,
-                    ),
-                    fit: BoxFit.cover,
-                  )
-                : null,
-          ),
-        );
-      },
+    if (profile.bannerUrl == null || profile.bannerUrl!.isEmpty) {
+      return Container(
+        height: double.infinity,
+        color: accentColor.withValues(alpha:0.3),
+      );
+    }
+
+    return SizedBox(
+      height: double.infinity,
+      child: AuthorizedCachedNetworkImage(
+        imageUrl: profile.bannerUrl!,
+        fit: BoxFit.cover,
+        useOldImageOnUrlChange: false,
+        placeholder: (context, url) => Container(
+          color: accentColor.withValues(alpha: 0.3),
+        ),
+        errorWidget: (context, url, error) => Container(
+          color: accentColor.withValues(alpha: 0.3),
+        ),
+      ),
     );
   }
 

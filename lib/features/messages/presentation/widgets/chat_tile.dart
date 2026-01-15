@@ -5,8 +5,7 @@
 /// Поддерживает навигацию к экрану чата при нажатии.
 library;
 
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show ValueListenableBuilder, ListTile, Icons, Theme;
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/widgets/authorized_cached_network_image.dart';
 import '../../domain/models/chat.dart';
@@ -237,7 +236,7 @@ class ChatTile extends StatelessWidget {
                 onTap: () async {
                   // Navigate to chat and wait for return
                   await Navigator.of(context).push(
-                    CupertinoPageRoute(
+                    MaterialPageRoute(
                       builder: (context) => ChatScreen(chat: currentChat),
                     ),
                   );

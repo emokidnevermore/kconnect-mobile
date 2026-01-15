@@ -60,11 +60,13 @@ class _TrackListItemState extends State<TrackListItem> with AutomaticKeepAliveCl
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: widget.onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
           children: [
             // Обложка
             ImageUtils.buildAlbumArt(
@@ -87,6 +89,7 @@ class _TrackListItemState extends State<TrackListItem> with AutomaticKeepAliveCl
                     style: AppTextStyles.bodyMedium.copyWith(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -95,7 +98,10 @@ class _TrackListItemState extends State<TrackListItem> with AutomaticKeepAliveCl
                   // Artist
                   Text(
                     widget.track.artist,
-                    style: AppTextStyles.bodySecondary.copyWith(fontSize: 12),
+                    style: AppTextStyles.bodySecondary.copyWith(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -106,7 +112,10 @@ class _TrackListItemState extends State<TrackListItem> with AutomaticKeepAliveCl
             // Duration
             Text(
               _formatDuration(widget.track.durationMs ~/ 1000),
-              style: AppTextStyles.bodySecondary.copyWith(fontSize: 12),
+              style: AppTextStyles.bodySecondary.copyWith(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             // Кнопка лайка
             if (widget.showLikeButton) ...[
@@ -124,6 +133,7 @@ class _TrackListItemState extends State<TrackListItem> with AutomaticKeepAliveCl
             ],
           ],
         ),
+      ),
       ),
     );
   }

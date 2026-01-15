@@ -246,8 +246,15 @@ class ProfileService {
     });
 
     final response = await _formDataDio.post(
-      '/api/profile/banner',
+      '/api/profile/upload-banner',
       data: formData,
+      options: Options(
+        headers: {
+          'Origin': 'https://k-connect.ru',
+          'Referer': 'https://k-connect.ru/settings',
+        },
+        extra: {'withCredentials': true}
+      ),
     );
 
     if (response.statusCode != 200) {

@@ -365,6 +365,18 @@ class _FullScreenPlayerState extends State<FullScreenPlayer>
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmallScreen = screenHeight < 700;
+
+    // Адаптивные размеры
+    final albumArtSize = isSmallScreen ? 200.0 : 280.0;
+    final lyricsHeight = isSmallScreen ? 200.0 : 280.0;
+    final titleFontSize = isSmallScreen ? 24.0 : 28.0;
+    final artistFontSize = isSmallScreen ? 16.0 : 18.0;
+    final spacingAfterAlbum = isSmallScreen ? 20.0 : 40.0;
+    final spacingAfterSeek = isSmallScreen ? 12.0 : 24.0;
+    final bottomSpacing = isSmallScreen ? 20.0 : 60.0;
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: BlocListener<QueueBloc, QueueState>(
@@ -480,7 +492,7 @@ class _FullScreenPlayerState extends State<FullScreenPlayer>
                             child: isLyricsMode && _lyricsData?.hasSyncedLyrics == true
                               ? SizedBox(
                                   key: const ValueKey('lyrics_mode'),
-                                  height: 280,
+                                  height: lyricsHeight,
                                   width: double.infinity,
                                   child: _LyricsDisplay(
                                     lyricsData: _lyricsData!,
@@ -490,12 +502,12 @@ class _FullScreenPlayerState extends State<FullScreenPlayer>
                                 )
                               : SizedBox(
                                   key: const ValueKey('album_mode'),
-                                  height: 280,
+                                  height: albumArtSize,
                                   width: double.infinity,
                                   child: Center(
                                     child: Container(
-                                      width: 280,
-                                      height: 280,
+                                      width: albumArtSize,
+                                      height: albumArtSize,
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(20),
                                         boxShadow: [
@@ -524,7 +536,7 @@ class _FullScreenPlayerState extends State<FullScreenPlayer>
                                               child: Icon(
                                                 Icons.music_note,
                                                 color: context.dynamicPrimaryColor,
-                                                size: 80,
+                                                size: isSmallScreen ? 50 : 80,
                                               ),
                                             ),
                                           ),
@@ -537,7 +549,7 @@ class _FullScreenPlayerState extends State<FullScreenPlayer>
                         },
                       ),
 
-                      const SizedBox(height: 40),
+                      SizedBox(height: spacingAfterAlbum),
 
                       // Информация о треке (всегда видна)
                       AnimatedBuilder(
@@ -554,7 +566,7 @@ class _FullScreenPlayerState extends State<FullScreenPlayer>
                                   Text(
                                     track.title,
                                     style: AppTextStyles.h1.copyWith(
-                                      fontSize: 28,
+                                      fontSize: titleFontSize,
                                       fontWeight: FontWeight.bold,
                                       height: 1.2,
                                     ),
@@ -567,7 +579,7 @@ class _FullScreenPlayerState extends State<FullScreenPlayer>
                                   Text(
                                     track.artist,
                                     style: AppTextStyles.bodySecondary.copyWith(
-                                      fontSize: 18,
+                                      fontSize: artistFontSize,
                                       color: AppColors.textSecondary.withValues(alpha: 0.8),
                                     ),
                                     textAlign: TextAlign.center,
@@ -598,7 +610,7 @@ class _FullScreenPlayerState extends State<FullScreenPlayer>
                         ),
                       ),
 
-                      const SizedBox(height: 24),
+                      SizedBox(height: spacingAfterSeek),
 
                       // Кнопки управления
                       AnimatedBuilder(
@@ -621,7 +633,7 @@ class _FullScreenPlayerState extends State<FullScreenPlayer>
                         ),
                       ),
 
-                      const SizedBox(height: 60),
+                      SizedBox(height: bottomSpacing),
                     ],
                   ),
                 ),
@@ -742,7 +754,6 @@ class _SeekBar extends StatefulWidget {
 class _SeekBarState extends State<_SeekBar> with TickerProviderStateMixin {
   late AnimationController _waveAnimationController;
   late Animation<double> _phaseAnimation;
-  late Animation<double> _insetAnimation;
 
   @override
   void initState() {
@@ -758,14 +769,6 @@ class _SeekBarState extends State<_SeekBar> with TickerProviderStateMixin {
     _phaseAnimation = Tween<double>(
       begin: 0.0,
       end: 2 * pi, // Полный цикл волны за один период анимации
-    ).animate(CurvedAnimation(
-      parent: _waveAnimationController,
-      curve: Curves.linear,
-    ));
-
-    _insetAnimation = Tween<double>(
-      begin: 4.0,
-      end: 4.0, // Оставляем фиксированным
     ).animate(CurvedAnimation(
       parent: _waveAnimationController,
       curve: Curves.linear,
@@ -844,11 +847,14 @@ class _SeekBarState extends State<_SeekBar> with TickerProviderStateMixin {
                   AnimatedBuilder(
                     animation: _waveAnimationController,
                     builder: (context, child) {
-                      return LinearProgressIndicatorM3E(
-                        value: progress,
-                        activeColor: widget.trackAccentColor ?? context.dynamicPrimaryColor,
-                        phase: _phaseAnimation.value,
-                        inset: _insetAnimation.value,
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 0.0),
+                        child: LinearProgressIndicatorM3E(
+                          value: progress,
+                          activeColor: widget.trackAccentColor ?? context.dynamicPrimaryColor,
+                          phase: _phaseAnimation.value,
+                          inset: 16,
+                        ),
                       );
                     },
                   ),
@@ -1118,6 +1124,14 @@ class _LyricsDisplayState extends State<_LyricsDisplay>
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmallScreen = screenHeight < 700;
+
+    // Адаптивные размеры шрифтов для лирики
+    final previousFontSize = isSmallScreen ? 14.0 : 16.0;
+    final currentFontSize = isSmallScreen ? 20.0 : 24.0;
+    final nextFontSize = isSmallScreen ? 14.0 : 16.0;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: AnimatedBuilder(
@@ -1134,7 +1148,7 @@ class _LyricsDisplayState extends State<_LyricsDisplay>
                     opacity: (0.8 * _fadeAnimation.value).clamp(0.0, 1.0),
                     child: _LyricsLine(
                       text: _previousText!,
-                      fontSize: 16,
+                      fontSize: previousFontSize,
                       opacity: 0.8,
                       blur: 0.0, // Убираем размытие полностью
                       color: widget.accentColor.withValues(alpha: 0.6), // Делаем цвет более тусклым
@@ -1152,7 +1166,7 @@ class _LyricsDisplayState extends State<_LyricsDisplay>
                     opacity: _fadeAnimation.value,
                     child: _LyricsLine(
                       text: _currentText!,
-                      fontSize: 24,
+                      fontSize: currentFontSize,
                       opacity: 1.0,
                       blur: 0.0,
                       color: widget.accentColor,
@@ -1171,7 +1185,7 @@ class _LyricsDisplayState extends State<_LyricsDisplay>
                     opacity: 0.4 * _fadeAnimation.value,
                     child: _LyricsLine(
                       text: _nextText!,
-                      fontSize: 16,
+                      fontSize: nextFontSize,
                       opacity: 0.5,
                       blur: 1.0 + (1.0 - _fadeAnimation.value) * 1.0,
                       color: widget.accentColor.withValues(alpha: 0.7),

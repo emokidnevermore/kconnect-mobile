@@ -30,35 +30,37 @@ class TabBarStyleCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          SegmentedButton<TabBarGlassMode>(
-            segments: [
-              ButtonSegment<TabBarGlassMode>(
-                value: TabBarGlassMode.glass,
-                label: const Text('Glass'),
-                icon: const Icon(Icons.auto_awesome, size: 18),
-              ),
-              ButtonSegment<TabBarGlassMode>(
-                value: TabBarGlassMode.fakeGlass,
-                label: const Text('Fake Glass'),
-                icon: const Icon(Icons.grid_view, size: 18),
-              ),
-              ButtonSegment<TabBarGlassMode>(
-                value: TabBarGlassMode.solid,
-                label: const Text('Solid'),
-                icon: const Icon(Icons.check_box, size: 18),
-              ),
-            ],
-            selected: {selectedMode},
-            onSelectionChanged: (Set<TabBarGlassMode> newSelection) {
-              if (newSelection.isNotEmpty) {
-                onModeChanged(newSelection.first);
-              }
-            },
-            multiSelectionEnabled: false,
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<TabBarGlassMode>(
+              segments: [
+                ButtonSegment<TabBarGlassMode>(
+                  value: TabBarGlassMode.glass,
+                  label: const Text('Glass'),
+                  icon: const Icon(Icons.auto_awesome, size: 18),
+                ),
+                ButtonSegment<TabBarGlassMode>(
+                  value: TabBarGlassMode.fakeGlass,
+                  label: const Text('Fake Glass'),
+                  icon: const Icon(Icons.grid_view, size: 18),
+                ),
+                ButtonSegment<TabBarGlassMode>(
+                  value: TabBarGlassMode.solid,
+                  label: const Text('Solid'),
+                  icon: const Icon(Icons.check_box, size: 18),
+                ),
+              ],
+              selected: {selectedMode},
+              onSelectionChanged: (Set<TabBarGlassMode> newSelection) {
+                if (newSelection.isNotEmpty) {
+                  onModeChanged(newSelection.first);
+                }
+              },
+              multiSelectionEnabled: false,
+            ),
           ),
         ],
       ),
     );
   }
 }
-

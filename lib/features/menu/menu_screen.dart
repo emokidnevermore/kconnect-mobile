@@ -9,10 +9,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../core/utils/theme_extensions.dart';
+import '../../../core/theme/presentation/blocs/theme_bloc.dart';
+import '../../../core/theme/presentation/blocs/theme_state.dart';
 import '../../../routes/route_names.dart';
+import '../../../features/cache_management/cache_management_screen.dart';
+import '../../../features/personalization/personalization_screen.dart';
 import '../../../features/auth/presentation/blocs/auth_bloc.dart';
 import '../../../features/auth/presentation/blocs/auth_state.dart';
 import '../../../services/storage_service.dart';
+import '../../../features/menu/blacklist_screen.dart';
 
 /// Экран меню с настройками приложения
 ///
@@ -54,18 +59,22 @@ class _MenuScreenState extends State<MenuScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      _buildMenuCard(
-                        context,
-                        'Черный список',
-                        'Управление заблокированными пользователями',
-                        Icons.block,
-                        context.dynamicPrimaryColor,
-                        () => _navigateToBlacklist(context),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
+                  child: BlocBuilder<ThemeBloc, ThemeState>(
+                    builder: (context, state) {
+                      return Column(
+                        children: [
+                          _buildMenuCard(
+                            context,
+                            'Черный список',
+                            'Управление заблокированными пользователями',
+                            Icons.block,
+                            context.dynamicPrimaryColor,
+                            () => _navigateToBlacklist(context),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -81,42 +90,46 @@ class _MenuScreenState extends State<MenuScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      _buildMenuCard(
-                        context,
-                        'Управление кэшем',
-                        'Просмотр и управление кэшем приложения по категориям',
-                        Icons.storage,
-                        context.dynamicPrimaryColor,
-                        () => _navigateToCacheManagement(context),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildMenuCard(
-                        context,
-                        'Персонализация',
-                        'Настройки персонализации интерфейса приложения',
-                        Icons.color_lens,
-                        context.dynamicPrimaryColor,
-                        () => _navigateToPersonalization(context),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildMenuCard(
-                        context,
-                        'О приложении',
-                        'Версия приложения и информация о разработчике',
-                        Icons.info_outline,
-                        context.dynamicPrimaryColor,
-                        () => _showAboutDialog(context),
-                      ),
-                    ],
+                  child: BlocBuilder<ThemeBloc, ThemeState>(
+                    builder: (context, state) {
+                      return Column(
+                        children: [
+                          _buildMenuCard(
+                            context,
+                            'Управление кэшем',
+                            'Просмотр и управление кэшем приложения по категориям',
+                            Icons.storage,
+                            context.dynamicPrimaryColor,
+                            () => _navigateToCacheManagement(context),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildMenuCard(
+                            context,
+                            'Персонализация',
+                            'Настройки персонализации интерфейса приложения',
+                            Icons.color_lens,
+                            context.dynamicPrimaryColor,
+                            () => _navigateToPersonalization(context),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildMenuCard(
+                            context,
+                            'О приложении',
+                            'Версия приложения и информация о разработчике',
+                            Icons.info_outline,
+                            context.dynamicPrimaryColor,
+                            () => _showAboutDialog(context),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
               // Bottom padding for small screens to account for tab bar
               SliverToBoxAdapter(
                 child: SizedBox(
-                  height: MediaQuery.of(context).size.height < 700 ? 40 : 0,
+                  height: MediaQuery.of(context).size.height < 700 ? 80 : 20,
                 ),
               ),
               // Fill remaining space to ensure full height coverage
@@ -185,7 +198,11 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   void _navigateToCacheManagement(BuildContext context) {
-    Navigator.of(context).pushNamed(RouteNames.cacheManagement);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const CacheManagementScreen(),
+      ),
+    );
   }
 
   void _showAboutDialog(BuildContext context) {
@@ -212,10 +229,18 @@ class _MenuScreenState extends State<MenuScreen> {
 
 
   void _navigateToPersonalization(BuildContext context) {
-    Navigator.of(context).pushNamed(RouteNames.personalization);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const PersonalizationScreen(),
+      ),
+    );
   }
 
   void _navigateToBlacklist(BuildContext context) {
-    Navigator.of(context).pushNamed(RouteNames.blacklist);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const BlacklistScreen(),
+      ),
+    );
   }
 }

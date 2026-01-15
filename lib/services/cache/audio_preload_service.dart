@@ -55,6 +55,9 @@ class _PreloadTask {
 
 /// Сервис предзагрузки аудио
 class AudioPreloadService {
+  /// Флаг включения/отключения предзагрузки
+  static bool isEnabled = false;
+
   static AudioPreloadService? _instance;
   final AudioCacheService _cacheService = AudioCacheService.instance;
   
@@ -83,6 +86,8 @@ class AudioPreloadService {
     List<Track> tracks, {
     PreloadPriority priority = PreloadPriority.upcoming,
   }) async {
+    if (!isEnabled) return;
+
     for (final track in tracks) {
       await preloadTrack(track, priority: priority);
     }
@@ -96,6 +101,8 @@ class AudioPreloadService {
     Track track, {
     PreloadPriority priority = PreloadPriority.upcoming,
   }) async {
+    if (!isEnabled) return;
+
     final trackId = track.id.toString();
 
     // Пропускаем, если трек уже закеширован
@@ -138,6 +145,7 @@ class AudioPreloadService {
     int startIndex,
     int endIndex,
   ) async {
+    if (!isEnabled) return;
     final visibleTracks = tracks.sublist(
       startIndex.clamp(0, tracks.length),
       endIndex.clamp(0, tracks.length),
@@ -165,6 +173,7 @@ class AudioPreloadService {
     List<Track> queueTracks,
     int currentIndex,
   ) async {
+    if (!isEnabled) return;
     // Предзагружаем текущий трек (если еще не закеширован)
     if (currentTrack != null) {
       await preloadTrack(currentTrack, priority: PreloadPriority.current);

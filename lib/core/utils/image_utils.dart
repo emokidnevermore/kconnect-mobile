@@ -123,6 +123,8 @@ class ImageUtils {
           filterQuality: FilterQuality.low,
           memCacheWidth: width.toInt() * 2,
           memCacheHeight: height.toInt() * 2,
+          maxWidthDiskCache: width.toInt() * 4,
+          maxHeightDiskCache: height.toInt() * 4,
           placeholder: (context, url) => placeholder ??
               Container(
                 color: colorScheme.surfaceContainerHighest,

@@ -1,3 +1,4 @@
+import 'package:equatable/equatable.dart';
 import 'package:kconnect_mobile/core/utils/boolean_utils.dart';
 import 'package:kconnect_mobile/features/profile/domain/models/achievement_info.dart';
 import 'package:kconnect_mobile/features/profile/domain/models/connection_info.dart';
@@ -11,7 +12,7 @@ import 'package:kconnect_mobile/features/profile/domain/models/verification_info
 ///
 /// Содержит всю информацию о профиле пользователя включая
 /// личные данные, статистику, верификацию и социальные связи.
-class UserProfile {
+class UserProfile extends Equatable {
   // Basic user info
   final int id;
   final String name;
@@ -255,6 +256,50 @@ class UserProfile {
       'current_user_is_moderator': currentUserIsModerator,
     };
   }
+
+  @override
+  List<Object?> get props => [
+    id,
+    name,
+    username,
+    about,
+    photo,
+    coverPhoto,
+    statusText,
+    statusColor,
+    profileId,
+    followersCount,
+    followingCount,
+    friendsCount,
+    postsCount,
+    photosCount,
+    avatarUrl,
+    bannerUrl,
+    profileBackgroundUrl,
+    profileColor,
+    verificationStatus,
+    verification,
+    scam,
+    accountType,
+    mainAccountId,
+    elementConnected,
+    elementId,
+    telegramId,
+    telegramUsername,
+    registrationDate,
+    interests,
+    purchasedUsernames,
+    isFollowing,
+    isFriend,
+    notificationsEnabled,
+    socials,
+    achievement,
+    subscription,
+    connectInfo,
+    equippedItems,
+    ban,
+    currentUserIsModerator,
+  ];
 
   // Helper methods for UI
   bool get isVerified => verificationStatus == 'verified';

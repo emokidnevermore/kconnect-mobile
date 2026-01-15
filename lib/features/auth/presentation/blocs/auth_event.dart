@@ -18,6 +18,15 @@ class CheckAuthEvent extends AuthEvent {}
 
 class RefreshAuthEvent extends AuthEvent {}
 
+class UpdateUsernameEvent extends AuthEvent {
+  final String newUsername;
+
+  const UpdateUsernameEvent(this.newUsername);
+
+  @override
+  List<Object> get props => [newUsername];
+}
+
 class LogoutEvent extends AuthEvent {}
 
 class LoginEvent extends AuthEvent {
